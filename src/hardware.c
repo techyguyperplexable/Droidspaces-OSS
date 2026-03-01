@@ -473,31 +473,13 @@ int setup_x11_and_virgl_sockets(struct ds_config *cfg) {
 
   ds_log("Bridging Termux and container for X11/VirGL sockets...");
 
-  /* Ensure container /tmp exists */
+  /* Ensure container /tmp exists and is clean */
   mkdir_p(container_tmp, 01777);
 
-  /* Targeted mount for .X11-unix specifically */
-  char source_x11[PATH_MAX], target_x11[PATH_MAX];
-  snprintf(source_x11, sizeof(source_x11), "%s/.X11-unix", bridge_source);
-  snprintf(target_x11, sizeof(target_x11), "%s/.X11-unix", container_tmp);
-
-  if (access(source_x11, F_OK) == 0) {
-    mkdir_p(target_x11, 01777);
-    if (mount(source_x11, target_x11, NULL, MS_BIND, NULL) != 0) {
-      ds_warn("Failed to bridge X11 socket: %s", strerror(errno));
-    }
-  }
-
-  /* Targeted mount for .virgl_test specifically */
-  char source_virgl[PATH_MAX], target_virgl[PATH_MAX];
-  snprintf(source_virgl, sizeof(source_virgl), "%s/.virgl_test", bridge_source);
-  snprintf(target_virgl, sizeof(target_virgl), "%s/.virgl_test", container_tmp);
-
-  if (access(source_virgl, F_OK) == 0) {
-    mkdir_p(target_virgl, 01777);
-    if (mount(source_virgl, target_virgl, NULL, MS_BIND, NULL) != 0) {
-      ds_warn("Failed to bridge VirGL socket: %s", strerror(errno));
-    }
+  /* Bind mount entire Termux high-speed tmpfs to container /tmp.
+   * This ensures /tmp IS a mountpoint and unified with Termux. */
+  if (mount(bridge_source, container_tmp, NULL, MS_BIND, NULL) != 0) {
+    ds_warn("Failed to bridge /tmp socket layer: %s", strerror(errno));
   }
 
   /* Ensure permissions are correct */

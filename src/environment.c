@@ -123,12 +123,12 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
   if (!f) {
     /* Non-fatal: env file missing is fine, container still boots */
     if (errno != ENOENT) {
-      ds_warn("[-] Failed to open env file: %s (%s)", path, strerror(errno));
+      ds_warn("Failed to open env file: %s (%s)", path, strerror(errno));
     }
     return;
   }
 
-  ds_log("[+] Parsing environment file: %s", path);
+  ds_log("Parsing environment file: %s", path);
 
   char *line = NULL;
   size_t linecap = 0;
@@ -158,14 +158,14 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
     /* Find the '=' separator */
     char *eq = strchr(p, '=');
     if (!eq) {
-      ds_warn("[-] Env file line %d: no '=' found, skipping", line_num);
+      ds_warn("Env file line %d: no '=' found, skipping", line_num);
       continue;
     }
 
     /* Extract key */
     size_t key_len = (size_t)(eq - p);
     if (key_len == 0) {
-      ds_warn("[-] Env file line %d: empty key, skipping", line_num);
+      ds_warn("Env file line %d: empty key, skipping", line_num);
       continue;
     }
 
@@ -177,7 +177,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
 
     /* Validate key: [A-Za-z_][A-Za-z0-9_]* */
     if (!isalpha((unsigned char)key[0]) && key[0] != '_') {
-      ds_warn("[-] Env file line %d: invalid key '%s' "
+      ds_warn("Env file line %d: invalid key '%s' "
               "(must start with letter or _), skipping",
               line_num, key);
       free(key);
@@ -191,7 +191,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
       }
     }
     if (!key_valid) {
-      ds_warn("[-] Env file line %d: invalid key '%s' "
+      ds_warn("Env file line %d: invalid key '%s' "
               "(only [A-Za-z0-9_] allowed), skipping",
               line_num, key);
       free(key);
@@ -226,7 +226,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
       struct ds_env_var *new_vars =
           realloc(cfg->env_vars, new_cap * sizeof(struct ds_env_var));
       if (!new_vars) {
-        ds_error("[-] Out of memory while parsing env file");
+        ds_error("Out of memory while parsing env file");
         free(key);
         free(value);
         break;
@@ -241,15 +241,15 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
 
     /* Summary log for long values */
     if (strlen(value) > 60) {
-      ds_log("    " C_DIM "[added]" C_RESET " %s=%.60s...", key, value);
+      printf("    " C_DIM "[added]" C_RESET " %s=%.60s...\n", key, value);
     } else {
-      ds_log("    " C_DIM "[added]" C_RESET " %s=%s", key, value);
+      printf("    " C_DIM "[added]" C_RESET " %s=%s\n", key, value);
     }
   }
 
   free(line);
   fclose(f);
-  ds_log("[+] Cached %d environment variable(s) from file", cfg->env_var_count);
+  ds_log("Cached %d environment variable(s) from file", cfg->env_var_count);
 }
 
 void free_config_env_vars(struct ds_config *cfg) {

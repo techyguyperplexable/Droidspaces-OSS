@@ -102,8 +102,6 @@
 
 /* X11 Socket Paths (Host-side relative to /.old_root or absolute) */
 #define DS_X11_PATH_DESKTOP "/.old_root/tmp/.X11-unix"
-#define DS_X11_PATH_TERMUX                                                     \
-  "/.old_root/data/data/com.termux/files/usr/tmp/.X11-unix"
 #define DS_TERMUX_TMP_DIR "/data/data/com.termux/files/usr/tmp"
 #define DS_TERMUX_TMP_OLDROOT "/.old_root/data/data/com.termux/files/usr/tmp"
 #define DS_X11_CONTAINER_DIR "/tmp/.X11-unix"
