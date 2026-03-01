@@ -134,6 +134,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
   size_t linecap = 0;
   ssize_t linelen;
   int line_num = 0;
+  int failed_count = 0;
 
   while ((linelen = getline(&line, &linecap, f)) > 0) {
     line_num++;
@@ -159,6 +160,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
     char *eq = strchr(p, '=');
     if (!eq) {
       ds_warn("Env file line %d: no '=' found, skipping", line_num);
+      failed_count++;
       continue;
     }
 
@@ -166,6 +168,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
     size_t key_len = (size_t)(eq - p);
     if (key_len == 0) {
       ds_warn("Env file line %d: empty key, skipping", line_num);
+      failed_count++;
       continue;
     }
 
@@ -181,6 +184,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
               "(must start with letter or _), skipping",
               line_num, key);
       free(key);
+      failed_count++;
       continue;
     }
     int key_valid = 1;
@@ -195,6 +199,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
               "(only [A-Za-z0-9_] allowed), skipping",
               line_num, key);
       free(key);
+      failed_count++;
       continue;
     }
 
@@ -227,6 +232,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
           realloc(cfg->env_vars, new_cap * sizeof(struct ds_env_var));
       if (!new_vars) {
         ds_error("Out of memory while parsing env file");
+        failed_count++;
         free(key);
         free(value);
         break;
@@ -238,18 +244,17 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
     cfg->env_vars[cfg->env_var_count].key = key;
     cfg->env_vars[cfg->env_var_count].value = value;
     cfg->env_var_count++;
-
-    /* Summary log for long values */
-    if (strlen(value) > 60) {
-      printf("    " C_DIM "[added]" C_RESET " %s=%.60s...\n", key, value);
-    } else {
-      printf("    " C_DIM "[added]" C_RESET " %s=%s\n", key, value);
-    }
   }
 
   free(line);
   fclose(f);
-  ds_log("Cached %d environment variable(s) from file", cfg->env_var_count);
+
+  if (failed_count > 0) {
+    ds_log("Loaded %d environment variable(s) (%d failed)", cfg->env_var_count,
+           failed_count);
+  } else {
+    ds_log("Loaded %d environment variable(s)", cfg->env_var_count);
+  }
 }
 
 void free_config_env_vars(struct ds_config *cfg) {
