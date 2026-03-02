@@ -144,12 +144,16 @@ void build_container_ttys_string(struct ds_tty_info *ttys, int count, char *buf,
   buf[offset] = '\0';
 }
 
-static volatile int proxy_master_fd = -1;
+static volatile sig_atomic_t g_sigwinch_received = 0;
 static void handle_sigwinch(int sig) {
   (void)sig;
+  g_sigwinch_received = 1;
+}
+
+static void update_terminal_size(int master_fd) {
   struct winsize ws;
-  if (proxy_master_fd != -1 && ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
-    ioctl(proxy_master_fd, TIOCSWINSZ, &ws);
+  if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
+    ioctl(master_fd, TIOCSWINSZ, &ws);
   }
 }
 
@@ -160,11 +164,15 @@ int ds_terminal_proxy(int master_fd) {
 
   struct epoll_event ev, events[10];
   char buf[8192];
-  proxy_master_fd = master_fd;
 
   /* Propagate initial window size */
-  handle_sigwinch(SIGWINCH);
-  signal(SIGWINCH, handle_sigwinch);
+  update_terminal_size(master_fd);
+
+  struct sigaction sa;
+  sa.sa_handler = handle_sigwinch;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  sigaction(SIGWINCH, &sa, NULL);
 
   /* 1. Watch stdin */
   ev.events = EPOLLIN;
@@ -185,6 +193,11 @@ int ds_terminal_proxy(int master_fd) {
   int running = 1;
   while (running) {
     int nfds = epoll_wait(epfd, events, 10, -1);
+    if (g_sigwinch_received) {
+      g_sigwinch_received = 0;
+      update_terminal_size(master_fd);
+    }
+
     if (nfds < 0) {
       if (errno == EINTR)
         continue;
@@ -223,8 +236,7 @@ int ds_terminal_proxy(int master_fd) {
     }
   }
 
-  signal(SIGWINCH, SIG_DFL);
-  proxy_master_fd = -1;
+  sigaction(SIGWINCH, &(struct sigaction){.sa_handler = SIG_DFL}, NULL);
   close(epfd);
   return 0;
 }

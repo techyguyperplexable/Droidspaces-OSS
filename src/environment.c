@@ -20,7 +20,7 @@ static void set_container_defaults(const char *term) {
 }
 
 void load_etc_environment(void) {
-  FILE *envf = fopen("/etc/environment", "r");
+  FILE *envf = fopen("/etc/environment", "re");
   if (!envf)
     return;
 
@@ -119,7 +119,7 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
   if (!path || path[0] == '\0' || !cfg)
     return;
 
-  FILE *f = fopen(path, "r");
+  FILE *f = fopen(path, "re");
   if (!f) {
     /* Non-fatal: env file missing is fine, container still boots */
     if (errno != ENOENT) {

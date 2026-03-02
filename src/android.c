@@ -127,7 +127,7 @@ void android_configure_iptables(void) {
                       {"ip6tables", "-t", "filter", "-F", NULL},
                       {"iptables", "-P", "FORWARD", "ACCEPT", NULL},
                       {"iptables", "-t", "nat", "-A", "POSTROUTING", "-s",
-                       "10.0.3.0/24", "!", "-d", "10.0.3.0/24", "-j",
+                       DS_DEFAULT_SUBNET, "!", "-d", DS_DEFAULT_SUBNET, "-j",
                        "MASQUERADE", NULL},
                       {"iptables", "-t", "nat", "-A", "OUTPUT", "-p", "tcp",
                        "-d", "127.0.0.1", "-m", "tcp", "--dport", "1:65535",

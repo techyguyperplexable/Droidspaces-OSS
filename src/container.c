@@ -215,6 +215,8 @@ int start_rootfs(struct ds_config *cfg) {
                cfg->container_name, existing_pid);
       if (cfg->is_img_mount)
         unmount_rootfs_img(cfg->img_mount_point, cfg->foreground);
+      free_config_env_vars(cfg);
+      free_config_binds(cfg);
       return -1;
     }
   }
@@ -228,8 +230,11 @@ int start_rootfs(struct ds_config *cfg) {
   if (cfg->rootfs_img_path[0] && !restart_reuse) {
     if (mount_rootfs_img(cfg->rootfs_img_path, cfg->rootfs_path,
                          sizeof(cfg->rootfs_path), cfg->volatile_mode,
-                         cfg->container_name) < 0)
+                         cfg->container_name) < 0) {
+      free_config_env_vars(cfg);
+      free_config_binds(cfg);
       return -1;
+    }
     cfg->is_img_mount = 1;
     safe_strncpy(cfg->img_mount_point, cfg->rootfs_path,
                  sizeof(cfg->img_mount_point));
@@ -245,6 +250,8 @@ int start_rootfs(struct ds_config *cfg) {
   if (check_volatile_mode(cfg) < 0) {
     if (cfg->is_img_mount)
       unmount_rootfs_img(cfg->img_mount_point, cfg->foreground);
+    free_config_env_vars(cfg);
+    free_config_binds(cfg);
     return -1;
   }
 
@@ -353,8 +360,11 @@ int start_rootfs(struct ds_config *cfg) {
 
   /* 4. Fork Monitor Process */
   pid_t monitor_pid = fork();
-  if (monitor_pid < 0)
+  if (monitor_pid < 0) {
+    close(sync_pipe[0]);
+    close(sync_pipe[1]);
     ds_die("fork failed: %s", strerror(errno));
+  }
 
   if (monitor_pid == 0) {
     /* MONITOR PROCESS */
@@ -462,7 +472,7 @@ int start_rootfs(struct ds_config *cfg) {
   /* Wait for Monitor to send child PID */
   if (read(sync_pipe[0], &cfg->container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     ds_error("Monitor failed to send container PID.");
-    return -1;
+    goto cleanup;
   }
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
@@ -530,7 +540,9 @@ int start_rootfs(struct ds_config *cfg) {
        * handles this. Let's just return error so parent doesn't report
        * success.
        */
-      return -1;
+      free_config_binds(cfg);
+      free_config_env_vars(cfg);
+      goto cleanup;
     }
 
     show_info(cfg, 1);
@@ -548,6 +560,26 @@ int start_rootfs(struct ds_config *cfg) {
   free_config_env_vars(cfg);
 
   return 0;
+
+cleanup:
+  if (cfg->console.master >= 0) {
+    close(cfg->console.master);
+    cfg->console.master = -1;
+  }
+  for (int i = 0; i < cfg->tty_count; i++) {
+    if (cfg->ttys[i].master >= 0) {
+      close(cfg->ttys[i].master);
+      cfg->ttys[i].master = -1;
+    }
+  }
+  if (sync_pipe[0] >= 0)
+    close(sync_pipe[0]);
+  if (sync_pipe[1] >= 0)
+    close(sync_pipe[1]);
+
+  free_config_binds(cfg);
+  free_config_env_vars(cfg);
+  return -1;
 }
 
 int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
@@ -943,25 +975,7 @@ static void parse_pretty_name(FILE *fp, char *buf, size_t size) {
   }
 }
 
-static void get_container_os_pretty(pid_t pid, char *buf, size_t size) {
-  if (!buf || size == 0)
-    return;
-  buf[0] = '\0';
-
-  char path[PATH_MAX];
-  if (build_proc_root_path(pid, "/etc/os-release", path, sizeof(path)) != 0)
-    return;
-
-  FILE *fp = fopen(path, "r");
-  if (!fp)
-    return;
-
-  parse_pretty_name(fp, buf, size);
-  fclose(fp);
-}
-
-static void get_os_pretty_from_path(const char *osrelease_path, char *buf,
-                                    size_t size) {
+static void get_os_pretty(const char *osrelease_path, char *buf, size_t size) {
   if (!buf || size == 0)
     return;
   buf[0] = '\0';
@@ -1028,9 +1042,13 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
     printf("  PID: %d\n", pid);
 
     char pretty[256];
-    get_container_os_pretty(pid, pretty, sizeof(pretty));
-    if (pretty[0])
-      printf("  OS: %s\n", pretty);
+    char osr_path[PATH_MAX];
+    if (build_proc_root_path(pid, "/etc/os-release", osr_path,
+                             sizeof(osr_path)) == 0) {
+      get_os_pretty(osr_path, pretty, sizeof(pretty));
+      if (pretty[0])
+        printf("  OS: %s\n", pretty);
+    }
 
     printf("\n" C_GREEN "Features:" C_RESET "\n");
 
@@ -1062,7 +1080,7 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
       snprintf(osr_path, sizeof(osr_path), "%.4070s/etc/os-release",
                cfg->rootfs_path);
       char pretty[256];
-      get_os_pretty_from_path(osr_path, pretty, sizeof(pretty));
+      get_os_pretty(osr_path, pretty, sizeof(pretty));
       if (pretty[0])
         printf("  Rootfs OS: %s\n", pretty);
     }

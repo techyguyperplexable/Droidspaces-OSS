@@ -213,8 +213,9 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
     } else if (strcmp(key, "pidfile") == 0) {
       safe_strncpy(cfg->pidfile, val, sizeof(cfg->pidfile));
     } else if (strcmp(key, "env_file") == 0) {
-      if (strstr(val, "..")) {
-        ds_warn("Config: Path traversal attempt in env_file: %s", val);
+      if (strstr(val, "..") ||
+          (val[0] == '/' && !is_subpath(get_workspace_dir(), val))) {
+        ds_warn("Config: Invalid or unsafe env_file path: %s", val);
         continue;
       }
       safe_strncpy(cfg->env_file, val, sizeof(cfg->env_file));

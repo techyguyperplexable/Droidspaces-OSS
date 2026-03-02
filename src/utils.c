@@ -112,7 +112,7 @@ int remove_recursive(const char *path) {
  * ---------------------------------------------------------------------------*/
 
 int write_file(const char *path, const char *content) {
-  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 
@@ -157,7 +157,7 @@ int read_file(const char *path, char *buf, size_t size) {
   if (size == 0)
     return -1;
 
-  int fd = open(path, O_RDONLY);
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return -1;
 
@@ -195,7 +195,7 @@ int generate_uuid(char *buf, size_t size) {
   unsigned char raw[DS_UUID_LEN / 2];
 
   /* Primary path: /dev/urandom */
-  int fd = open("/dev/urandom", O_RDONLY);
+  int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
   if (fd >= 0) {
     ssize_t r = read(fd, raw, sizeof(raw));
     close(fd);

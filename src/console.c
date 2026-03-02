@@ -87,7 +87,10 @@ int console_monitor_loop(int master_fd, pid_t intermediate_pid,
         /* User input -> Container master */
         n = read(STDIN_FILENO, buf, sizeof(buf));
         if (n > 0) {
-          write_all(master_fd, buf, (size_t)n);
+          if (write_all(master_fd, buf, (size_t)n) < 0) {
+            running = 0;
+            break;
+          }
         } else if (n == 0) {
           /* EOF on stdin */
           // we might want to continue seeing output

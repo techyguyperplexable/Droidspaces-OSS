@@ -46,11 +46,13 @@ int internal_boot(struct ds_config *cfg) {
     return -1;
   }
 
+  /* Detect init system once — used for seccomp and cgroup setup */
+  int is_systemd = is_systemd_rootfs(cfg->rootfs_path);
+
   /* Apply Android compatibility Seccomp filter to child processes.
    * On legacy kernels, this neutralizes broken sandboxing logic in systemd
    * that triggers VFS deadlocks in grab_super(). */
   if (is_android()) {
-    int is_systemd = is_systemd_rootfs(cfg->rootfs_path);
     android_seccomp_setup(is_systemd);
   }
 
@@ -192,7 +194,6 @@ int internal_boot(struct ds_config *cfg) {
   /* 11. Setup Cgroups AFTER locking down /sys.
    * Mounting onto a directory on a RO parent is allowed for root, and it
    * ensures the sub-mount (tmpfs) is RW and independent of the parent's RO. */
-  int is_systemd = is_systemd_rootfs(cfg->rootfs_path);
   if (setup_cgroups(is_systemd) < 0) {
     ds_error("Failed to setup container cgroups.");
     return -1;
@@ -305,28 +306,33 @@ int internal_boot(struct ds_config *cfg) {
   /* 24. Redirect standard I/O to /dev/console */
   int console_fd = open("/dev/console", O_RDWR);
   if (console_fd >= 0) {
-    ds_terminal_set_stdfds(console_fd);
-    ds_terminal_make_controlling(console_fd);
-
-    /* Set a sane default window size on the console PTY if none was set.
-     * The parent's console_monitor_loop will overwrite this with the
-     * real host terminal size via SIGWINCH, but we need a reasonable
-     * default so early boot output (before the parent syncs) is
-     * properly aligned. Without this, programs like sudo that query
-     * the terminal size get {0,0} and produce misaligned output. */
-    struct winsize ws;
-    if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col == 0 &&
-        ws.ws_row == 0) {
-      ws.ws_row = 24;
-      ws.ws_col = 80;
-      ioctl(console_fd, TIOCSWINSZ, &ws);
-    }
-
-    /* Sticky permissions again just in case systemd's TTYReset stripped them */
-    fchmod(console_fd, 0620);
-    fchown(console_fd, 0, 5);
-    if (console_fd > 2)
+    if (ds_terminal_set_stdfds(console_fd) < 0) {
+      ds_warn("Failed to redirect stdio to /dev/console");
       close(console_fd);
+    } else {
+      ds_terminal_make_controlling(console_fd);
+
+      /* Set a sane default window size on the console PTY if none was set.
+       * The parent's console_monitor_loop will overwrite this with the
+       * real host terminal size via SIGWINCH, but we need a reasonable
+       * default so early boot output (before the parent syncs) is
+       * properly aligned. Without this, programs like sudo that query
+       * the terminal size get {0,0} and produce misaligned output. */
+      struct winsize ws;
+      if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col == 0 &&
+          ws.ws_row == 0) {
+        ws.ws_row = 24;
+        ws.ws_col = 80;
+        ioctl(console_fd, TIOCSWINSZ, &ws);
+      }
+
+      /* Sticky permissions again just in case systemd's TTYReset stripped them
+       */
+      fchmod(console_fd, 0620);
+      fchown(console_fd, 0, DS_DEFAULT_TTY_GID);
+      if (console_fd > 2)
+        close(console_fd);
+    }
   }
 
   /* 25. EXEC INIT */

@@ -138,6 +138,14 @@ int is_container_running(struct ds_config *cfg, pid_t *pid_out) {
   return 0;
 }
 
+static void get_container_name_from_pidfile(const char *pidfile, char *name,
+                                            size_t size) {
+  safe_strncpy(name, pidfile, size);
+  char *dot = strrchr(name, '.');
+  if (dot)
+    *dot = '\0';
+}
+
 int count_running_containers(char *first_name, size_t size) {
   DIR *d = opendir(get_pids_dir());
   if (!d)
@@ -149,15 +157,9 @@ int count_running_containers(char *first_name, size_t size) {
   while ((ent = readdir(d)) != NULL) {
     if (is_pid_file(ent->d_name)) {
       struct ds_config tmp_cfg = {0};
-      resolve_pidfile_from_name(ent->d_name, tmp_cfg.pidfile,
-                                sizeof(tmp_cfg.pidfile));
-      /* resolve_pidfile_from_name above gives us "Pids/foo.pid.pid" if we pass
-       * ent->d_name ("foo.pid"). We need just the name. */
       char clean_name[256];
-      safe_strncpy(clean_name, ent->d_name, sizeof(clean_name));
-      char *dot = strrchr(clean_name, '.');
-      if (dot)
-        *dot = '\0';
+      get_container_name_from_pidfile(ent->d_name, clean_name,
+                                      sizeof(clean_name));
 
       safe_strncpy(tmp_cfg.container_name, clean_name,
                    sizeof(tmp_cfg.container_name));
@@ -301,10 +303,8 @@ int show_containers(void) {
     if (is_pid_file(ent->d_name)) {
       struct ds_config tmp_cfg = {0};
       char clean_name[128];
-      safe_strncpy(clean_name, ent->d_name, sizeof(clean_name));
-      char *dot = strrchr(clean_name, '.');
-      if (dot)
-        *dot = '\0';
+      get_container_name_from_pidfile(ent->d_name, clean_name,
+                                      sizeof(clean_name));
 
       safe_strncpy(tmp_cfg.container_name, clean_name,
                    sizeof(tmp_cfg.container_name));
@@ -383,7 +383,7 @@ int show_containers(void) {
 int is_container_init(pid_t pid) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d/status", pid);
-  FILE *f = fopen(path, "r");
+  FILE *f = fopen(path, "re");
   if (!f)
     return 0;
 
@@ -414,16 +414,23 @@ int scan_containers(void) {
     return -1;
 
   /* 1. Tracked Mount Points (to detect orphaned mounts) */
-  char tracked_mounts[128][PATH_MAX];
+  typedef char mount_path_t[PATH_MAX];
+  mount_path_t *tracked_mounts =
+      calloc(DS_MAX_TRACKED_ENTRIES, sizeof(mount_path_t));
+  if (!tracked_mounts) {
+    free(pids);
+    return -1;
+  }
   int tracked_mount_count = 0;
 
   /* 2. Get list of already tracked PIDs */
-  pid_t tracked[128];
+  pid_t tracked[DS_MAX_TRACKED_ENTRIES];
   int tracked_count = 0;
   DIR *d = opendir(get_pids_dir());
   if (d) {
     struct dirent *ent;
-    while ((ent = readdir(d)) != NULL && tracked_count < 128) {
+    while ((ent = readdir(d)) != NULL &&
+           tracked_count < DS_MAX_TRACKED_ENTRIES) {
       if (!is_pid_file(ent->d_name))
         continue;
       char pf[PATH_MAX];
@@ -433,7 +440,7 @@ int scan_containers(void) {
       if (read_and_validate_pid(pf, &p) == 0) {
         tracked[tracked_count++] = p;
         /* Also capture the mount path if tracked */
-        if (tracked_mount_count < 128) {
+        if (tracked_mount_count < DS_MAX_TRACKED_ENTRIES) {
           if (read_mount_path(pf, tracked_mounts[tracked_mount_count],
                               PATH_MAX) > 0)
             tracked_mount_count++;

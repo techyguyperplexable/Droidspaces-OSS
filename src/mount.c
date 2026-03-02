@@ -249,12 +249,17 @@ int setup_devpts(int hw_access) {
   mkdir(pts_path, 0755);
 
   /* Try mounting devpts with newinstance flag (CRITICAL for private PTYs) */
-  const char *opts[] = {"gid=5,newinstance,ptmxmode=0666,mode=0620",
-                        "newinstance,ptmxmode=0666,mode=0620",
-                        "gid=5,newinstance,mode=0620",
-                        "newinstance,ptmxmode=0666",
-                        "newinstance",
-                        NULL};
+  char optbuf[256];
+  snprintf(optbuf, sizeof(optbuf), "gid=%d,newinstance,ptmxmode=0666,mode=0620",
+           DS_DEFAULT_TTY_GID);
+
+  char optbuf2[128];
+  snprintf(optbuf2, sizeof(optbuf2), "gid=%d,newinstance,mode=0620",
+           DS_DEFAULT_TTY_GID);
+
+  const char *opts[] = {optbuf,        "newinstance,ptmxmode=0666,mode=0620",
+                        optbuf2,       "newinstance,ptmxmode=0666",
+                        "newinstance", NULL};
 
   for (int i = 0; opts[i]; i++) {
     if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opts[i]) ==
@@ -322,9 +327,6 @@ int check_volatile_mode(struct ds_config *cfg) {
 }
 
 int setup_volatile_overlay(struct ds_config *cfg) {
-  if (check_volatile_mode(cfg) < 0)
-    return -1;
-
   /* 1. Create temporary workspace in Droidspaces/Volatile/<name> */
   char base[PATH_MAX];
   snprintf(base, sizeof(base), "%s/" DS_VOLATILE_SUBDIR "/%s",
@@ -476,10 +478,16 @@ int setup_custom_binds(struct ds_config *cfg, const char *rootfs) {
       continue;
     }
 
-    /* Check if source exists on host */
-    if (access(cfg->binds[i].src, F_OK) != 0) {
+    /* Check if source exists on host and is not a symlink */
+    struct stat st_src;
+    if (lstat(cfg->binds[i].src, &st_src) != 0) {
       ds_warn("Skip bind mount: source path not found on host: %s",
               cfg->binds[i].src);
+      continue;
+    }
+    if (S_ISLNK(st_src.st_mode)) {
+      ds_error("Security Violation: Bind source %s is a symlink!",
+               cfg->binds[i].src);
       continue;
     }
 

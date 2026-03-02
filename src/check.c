@@ -223,11 +223,15 @@ int check_requirements_detailed(void) {
                "\n\n",
                DS_VERSION);
 
+  int missing_must = 0;
+
   /* MUST HAVE */
   check_append(C_BOLD
                "[MUST HAVE]" C_RESET
                "\nThese features are required for Droidspaces to work:\n\n");
 
+  if (!is_root)
+    missing_must++;
   print_ds_check("Root privileges",
                  "Running as root user (required for container operations)",
                  is_root, "MUST");
@@ -236,40 +240,72 @@ int check_requirements_detailed(void) {
   snprintf(kver_desc, sizeof(kver_desc),
            "Linux kernel version %d.%d.0 or later", DS_MIN_KERNEL_MAJOR,
            DS_MIN_KERNEL_MINOR);
-  print_ds_check("Linux version", kver_desc, check_kernel_version_supported(),
+  int kver_ok = check_kernel_version_supported();
+  if (!kver_ok)
+    missing_must++;
+  print_ds_check("Linux version", kver_desc, kver_ok, "MUST");
+
+  int has_pid_ns = check_ns(CLONE_NEWPID, "pid");
+  if (!has_pid_ns)
+    missing_must++;
+  print_ds_check("PID namespace", "Process ID namespace isolation", has_pid_ns,
                  "MUST");
 
-  print_ds_check("PID namespace", "Process ID namespace isolation",
-                 check_ns(CLONE_NEWPID, "pid"), "MUST");
-
+  int has_mnt_ns = check_ns(CLONE_NEWNS, "mnt");
+  if (!has_mnt_ns)
+    missing_must++;
   print_ds_check("Mount namespace", "Filesystem namespace isolation",
-                 check_ns(CLONE_NEWNS, "mnt"), "MUST");
+                 has_mnt_ns, "MUST");
 
-  print_ds_check("UTS namespace", "Hostname/domainname isolation",
-                 check_ns(CLONE_NEWUTS, "uts"), "MUST");
+  int has_uts_ns = check_ns(CLONE_NEWUTS, "uts");
+  if (!has_uts_ns)
+    missing_must++;
+  print_ds_check("UTS namespace", "Hostname/domainname isolation", has_uts_ns,
+                 "MUST");
 
+  int has_ipc_ns = check_ns(CLONE_NEWIPC, "ipc");
+  if (!has_ipc_ns)
+    missing_must++;
   print_ds_check("IPC namespace", "Inter-process communication isolation",
-                 check_ns(CLONE_NEWIPC, "ipc"), "MUST");
+                 has_ipc_ns, "MUST");
 
+  int has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
+  if (!has_devtmpfs)
+    missing_must++;
   print_ds_check("devtmpfs support", "Kernel support for devtmpfs",
-                 grep_file("/proc/filesystems", "devtmpfs"), "MUST");
+                 has_devtmpfs, "MUST");
 
+  int has_cg_dev = check_cgroup_devices();
+  if (!has_cg_dev)
+    missing_must++;
   print_ds_check("cgroup devices support",
-                 "Control Groups (devices controller) support",
-                 check_cgroup_devices(), "MUST");
+                 "Control Groups (devices controller) support", has_cg_dev,
+                 "MUST");
 
+  int has_pivot = check_pivot_root();
+  if (!has_pivot)
+    missing_must++;
   print_ds_check("pivot_root syscall",
-                 "Kernel support for the pivot_root syscall",
-                 check_pivot_root(), "MUST");
+                 "Kernel support for the pivot_root syscall", has_pivot,
+                 "MUST");
 
+  int has_proc_fs = access("/proc/self", F_OK) == 0;
+  if (!has_proc_fs)
+    missing_must++;
   print_ds_check("/proc filesystem", "Proc filesystem mount support",
-                 access("/proc/self", F_OK) == 0, "MUST");
+                 has_proc_fs, "MUST");
 
-  print_ds_check("/sys filesystem", "Sys filesystem mount support",
-                 access("/sys/kernel", F_OK) == 0, "MUST");
+  int has_sys_fs = access("/sys/kernel", F_OK) == 0;
+  if (!has_sys_fs)
+    missing_must++;
+  print_ds_check("/sys filesystem", "Sys filesystem mount support", has_sys_fs,
+                 "MUST");
 
+  int has_seccomp = check_seccomp();
+  if (!has_seccomp)
+    missing_must++;
   print_ds_check("Seccomp support", "Kernel support for Seccomp (Bypass Mode)",
-                 check_seccomp(), "MUST");
+                 has_seccomp, "MUST");
 
   /* RECOMMENDED */
   check_append("\n" C_BOLD "[RECOMMENDED]" C_RESET
@@ -319,26 +355,6 @@ int check_requirements_detailed(void) {
                  grep_file("/proc/filesystems", "overlay"), "OPT");
 
   /* FINAL SUMMARY */
-  int missing_must = 0;
-  if (!is_root)
-    missing_must++;
-  if (!check_ns(CLONE_NEWNS, "mnt"))
-    missing_must++;
-  if (!check_ns(CLONE_NEWPID, "pid"))
-    missing_must++;
-  if (!check_ns(CLONE_NEWUTS, "uts"))
-    missing_must++;
-  if (!check_ns(CLONE_NEWIPC, "ipc"))
-    missing_must++;
-  if (!grep_file("/proc/filesystems", "devtmpfs"))
-    missing_must++;
-  if (!check_cgroup_devices())
-    missing_must++;
-  if (!check_pivot_root())
-    missing_must++;
-  if (!check_kernel_version_supported())
-    missing_must++;
-
   check_append("\n" C_BOLD "Summary:" C_RESET "\n");
   if (missing_must > 0)
     check_append(

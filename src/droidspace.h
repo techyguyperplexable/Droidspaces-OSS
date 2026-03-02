@@ -100,6 +100,11 @@
 #define DS_SYSTEMD_CONTAINER_MARKER "/run/systemd/container"
 #define DS_DROIDSPACES_MARKER "/run/droidspaces"
 
+/* Hardening constants */
+#define DS_DEFAULT_TTY_GID 5
+#define DS_DEFAULT_SUBNET "10.0.3.0/24"
+#define DS_MAX_TRACKED_ENTRIES 512
+
 /* X11 Socket Paths (Host-side relative to /.old_root or absolute) */
 #define DS_X11_PATH_DESKTOP "/.old_root/tmp/.X11-unix"
 #define DS_TERMUX_TMP_DIR "/data/data/com.termux/files/usr/tmp"

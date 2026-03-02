@@ -24,7 +24,8 @@ int ds_get_dns_servers(const char *custom_dns, char *out, size_t size) {
     while (token && (size_t)strlen(out) < size - 32) {
       char line[128];
       snprintf(line, sizeof(line), "nameserver %s\n", token);
-      strncat(out, line, size - strlen(out) - 1);
+      size_t current_len = strlen(out);
+      snprintf(out + current_len, size - current_len, "%s", line);
       count++;
       token = strtok_r(NULL, ", ", &saveptr);
     }
@@ -127,7 +128,7 @@ int fix_networking_rootfs(struct ds_config *cfg) {
     const char *etc_group = "/etc/group";
     if (access(etc_group, F_OK) == 0) {
       if (!grep_file(etc_group, "aid_inet")) {
-        FILE *fg = fopen(etc_group, "a");
+        FILE *fg = fopen(etc_group, "ae");
         if (fg) {
           fprintf(
               fg,

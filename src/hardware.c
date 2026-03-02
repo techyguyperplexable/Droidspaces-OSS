@@ -194,13 +194,13 @@ int setup_gpu_groups(gid_t *gpu_gids, int gid_count) {
   const char *group_path = "/etc/group";
   const char *tmp_path = "/etc/group.tmp";
 
-  FILE *fin = fopen(group_path, "r");
+  FILE *fin = fopen(group_path, "re");
   if (!fin) {
     ds_warn("Cannot read /etc/group: %s", strerror(errno));
     return -1;
   }
 
-  FILE *fout = fopen(tmp_path, "w");
+  FILE *fout = fopen(tmp_path, "we");
   if (!fout) {
     ds_warn("Cannot create /etc/group.tmp: %s", strerror(errno));
     fclose(fin);
@@ -353,18 +353,21 @@ void stop_termux_if_running(void) {
   }
 
   /* Check if Termux is actually running */
-  if (system("pidof com.termux >/dev/null 2>&1") != 0) {
+  char *pidof_argv[] = {"pidof", "com.termux", NULL};
+  if (run_command_quiet(pidof_argv) != 0) {
     return; /* Not running, nothing to do */
   }
 
   ds_log("Stopping Termux to prepare unified /tmp...");
 
   /* Method 1: Use Android Activity Manager to stop app */
-  int ret = system("am force-stop com.termux 2>/dev/null");
+  char *am_argv[] = {"am", "force-stop", "com.termux", NULL};
+  int ret = run_command_quiet(am_argv);
 
   /* Method 2: Fallback to pkill if am fails */
   if (ret != 0) {
-    system("pkill -9 com.termux 2>/dev/null");
+    char *pkill_argv[] = {"pkill", "-9", "com.termux", NULL};
+    run_command_quiet(pkill_argv);
   }
 
   /* Give it a moment to die */

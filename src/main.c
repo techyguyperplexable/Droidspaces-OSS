@@ -521,6 +521,7 @@ int main(int argc, char **argv) {
   }
 
 cleanup:
+  free_config_env_vars(&cfg);
   free_config_binds(&cfg);
   return ret;
 }
