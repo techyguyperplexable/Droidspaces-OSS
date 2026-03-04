@@ -190,7 +190,6 @@ int main(int argc, char **argv) {
    * 3. Re-parse CLI to apply overrides on top of config.
    */
   const char *discovered_cmd = NULL;
-  int temp_optind = optind;
   int opt;
   /* 1. Identity Pass: Capture command, explicit config, and name. */
   while ((opt = getopt_long(argc, argv, "+r:i:n:h:d:fHXPvVB:C:E:", long_options,
@@ -204,7 +203,7 @@ int main(int argc, char **argv) {
   }
   if (optind < argc)
     discovered_cmd = argv[optind];
-  optind = temp_optind; /* Reset for config loading */
+  optind = 0; /* Full re-initialization for config loading pass */
 
   /* Load configuration if specified or available */
   if (cfg.config_file_specified) {
@@ -212,7 +211,6 @@ int main(int argc, char **argv) {
   } else {
     /* Auto-detect config from CLI rootfs arguments (preview only) */
     char temp_r[PATH_MAX] = {0}, temp_i[PATH_MAX] = {0};
-    int t_optind = optind;
     while ((opt = getopt_long(argc, argv, "+r:i:n:h:d:fHXPvVB:C:E:",
                               long_options, NULL)) != -1) {
       if (opt == 'r')
@@ -220,7 +218,7 @@ int main(int argc, char **argv) {
       if (opt == 'i')
         safe_strncpy(temp_i, optarg, sizeof(temp_i));
     }
-    optind = t_optind;
+    optind = 0; /* Full re-initialization for override pass */
 
     char *auto_p = ds_config_auto_path(temp_r[0] ? temp_r : temp_i);
     if (auto_p) {
