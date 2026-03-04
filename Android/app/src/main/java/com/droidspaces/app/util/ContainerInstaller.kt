@@ -147,9 +147,33 @@ object ContainerInstaller {
             // Clean up temp config file
             tempConfigFile.delete()
 
+            logger.i("Container configuration saved")
             createdPaths.add(configFilePath)
 
-            logger.i("Container configuration saved")
+            // Step 5.1: Write .env file if content exists
+            if (!config.envFileContent.isNullOrBlank()) {
+                logger.i("Writing environment variables (.env)...")
+                val envFilePath = "$containerPath/.env"
+                val tempEnvFile = File("${context.cacheDir}/.env_${sanitizedName}")
+                
+                try {
+                    tempEnvFile.writeText(config.envFileContent + "\n")
+                    
+                    val envCopyResult = Shell.cmd("cp \"${tempEnvFile.absolutePath}\" \"$envFilePath\" 2>&1").exec()
+                    if (!envCopyResult.isSuccess) {
+                        val errorMsg = envCopyResult.err.joinToString("\n")
+                        logger.w("Warning: Failed to copy .env file: $errorMsg")
+                    } else {
+                        Shell.cmd("chmod 644 \"$envFilePath\"").exec()
+                        logger.i("Environment variables saved")
+                        createdPaths.add(envFilePath)
+                    }
+                } catch (e: Exception) {
+                    logger.w("Warning: Failed to write environment variables: ${e.message}")
+                } finally {
+                    tempEnvFile.delete()
+                }
+            }
 
             // Step 6: Verify installation
             logger.i("Verifying installation...")
