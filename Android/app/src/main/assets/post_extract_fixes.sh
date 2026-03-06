@@ -50,62 +50,18 @@ DNS=8.8.8.8 8.8.4.4
 FallbackDNS=1.1.1.1
 EOF
 
-# 2. Setup systemd-networkd for automatic route management
+# 2. Setup systemd-networkd to explicitly IGNORE interfaces
+# This prevents systemd-networkd from running DHCP and stripping the static IPs 
+# explicitly configured by Droidspaces via Netlink during container boot.
 log "Configuring systemd-networkd..."
 mkdir -p "$ROOTFS_PATH/etc/systemd/network"
 
-# WiFi network configuration
-cat > "$ROOTFS_PATH/etc/systemd/network/10-wifi.network" << 'EOF'
+cat > "$ROOTFS_PATH/etc/systemd/network/99-unmanaged.network" << 'EOF'
 [Match]
-Name=wlan* wlp* wl* wifi*
+Name=*
 
-[Network]
-DHCP=ipv4
-IPv6AcceptRA=yes
-
-[DHCP]
-RouteMetric=100
-
-[IPv6AcceptRA]
-RouteMetric=100
-UseRoutes=yes
-UseDomains=yes
-EOF
-
-# Mobile network configuration
-cat > "$ROOTFS_PATH/etc/systemd/network/20-mobile.network" << 'EOF'
-[Match]
-Name=rmnet* ccmni* pdp* wwan* mobile*
-
-[Network]
-DHCP=ipv4
-IPv6AcceptRA=yes
-
-[DHCP]
-RouteMetric=200
-
-[IPv6AcceptRA]
-RouteMetric=200
-UseRoutes=yes
-UseDomains=yes
-EOF
-
-# Other network configuration
-cat > "$ROOTFS_PATH/etc/systemd/network/30-other.network" << 'EOF'
-[Match]
-Name=eth* usb* enp* ens*
-
-[Network]
-DHCP=ipv4
-IPv6AcceptRA=yes
-
-[DHCP]
-RouteMetric=300
-
-[IPv6AcceptRA]
-RouteMetric=300
-UseRoutes=yes
-UseDomains=yes
+[Link]
+Unmanaged=yes
 EOF
 
 # Enable systemd-resolved and systemd-networkd by default
