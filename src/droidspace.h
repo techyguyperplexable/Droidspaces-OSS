@@ -382,6 +382,7 @@ int domount(const char *src, const char *tgt, const char *fstype,
 int domount_silent(const char *src, const char *tgt, const char *fstype,
                    unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
+int ds_apply_jail_mask(int hw_access);
 int setup_dev(const char *rootfs, int hw_access);
 int create_devices(const char *rootfs, int hw_access);
 int setup_devpts(int hw_access);
@@ -545,6 +546,7 @@ void write_plain_env_file(const char *src, const char *dst);
  * boot.c
  * ---------------------------------------------------------------------------*/
 
+void ds_apply_capability_hardening(int hw_access);
 int internal_boot(struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------
