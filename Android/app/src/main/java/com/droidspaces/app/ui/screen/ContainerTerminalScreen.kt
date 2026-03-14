@@ -45,6 +45,7 @@ import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import java.lang.ref.WeakReference
 import java.util.UUID
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.droidspaces.app.R
 
 private data class TerminalTab(
@@ -63,6 +64,7 @@ fun ContainerTerminalScreen(
     val context = LocalContext.current
     val activity = context as? Activity
 
+    val keyboardController = LocalSoftwareKeyboardController.current
     var binder by remember { mutableStateOf<TerminalSessionService.SessionBinder?>(null) }
 
     DisposableEffect(Unit) {
@@ -150,14 +152,20 @@ fun ContainerTerminalScreen(
             binder?.terminateSession(tab.id)
         }, 300)
 
+        if (tabs.size == 1) keyboardController?.hide()
         val idx = tabs.indexOf(tab)
         tabs.remove(tab)
         if (tabs.isEmpty()) onNavigateBack()
         else activeTabId = tabs.getOrElse(idx.coerceAtMost(tabs.lastIndex)) { tabs.last() }.id
     }
 
+    val exitScreen = {
+        keyboardController?.hide()
+        onNavigateBack()
+    }
+
     // Physical back leaves sessions alive in the service.
-    BackHandler { onNavigateBack() }
+    BackHandler { exitScreen() }
 
     if (showUserPicker) {
         UserPickerDialog(
@@ -168,7 +176,7 @@ fun ContainerTerminalScreen(
             },
             onDismiss = {
                 showUserPicker = false
-                if (tabs.isEmpty()) onNavigateBack()
+                if (tabs.isEmpty()) exitScreen()
             }
         )
     }
@@ -187,7 +195,7 @@ fun ContainerTerminalScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { onNavigateBack() }) {
+                        IconButton(onClick = { exitScreen() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
@@ -259,7 +267,7 @@ fun ContainerTerminalScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(top = paddingValues.calculateTopPadding())
                 .background(MaterialTheme.colorScheme.surface)
         ) {
             if (binder == null || tabs.isEmpty()) {
@@ -306,7 +314,7 @@ private fun TerminalTabView(
         exit = fadeOut(animationSpec = AnimationUtils.fastSpec()),
         modifier = modifier
     ) {
-        Column(modifier = Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
             AndroidView(
                 factory = { ctx ->
@@ -380,8 +388,9 @@ private fun TerminalTabView(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    .height(64.dp)
             )
         }
     }
