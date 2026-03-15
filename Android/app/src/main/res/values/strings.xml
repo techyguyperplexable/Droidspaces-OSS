@@ -412,5 +412,18 @@
     <string name="grant_permission">Grant Permission</string>
     <string name="open_settings">Open Settings</string>
     <string name="i_understand">I Understand</string>
+
+    <!-- Sparse Image Management -->
+    <string name="migrate_to_sparse_image">Migrate to a sparse image</string>
+    <string name="resize_sparse_image">Resize the sparse image</string>
+    <string name="migrate_dialog_title">Migrate to Sparse Image</string>
+    <string name="resize_dialog_title">Resize Sparse Image</string>
+    <string name="migrate_dialog_message">Migrating \"%1$s\" to a sparse image will create a dedicated ext4 filesystem. This operation is destructive if interrupted. Please backup your data.</string>
+    <string name="resize_dialog_message">Resizing the sparse image for \"%1$s\". Increasing size is safer than shrinking. Please backup your data.</string>
+    <string name="operation_in_progress">Operation in progress, please wait...</string>
+    <string name="starting_migration">Starting migration operation...</string>
+    <string name="starting_resizing">Starting resizing operation...</string>
+    <string name="migrating">Migrating...</string>
+    <string name="resizing">Resizing...</string>
 </resources>
 

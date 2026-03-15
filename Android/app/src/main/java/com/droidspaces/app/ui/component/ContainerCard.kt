@@ -37,6 +37,8 @@ fun ContainerCard(
     onRestart: () -> Unit = {},
     onEdit: () -> Unit = {},
     onUninstall: () -> Unit = {},
+    onMigrate: () -> Unit = {},
+    onResize: () -> Unit = {},
     isOperationRunning: Boolean = false,
     onShowLogs: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -296,6 +298,31 @@ fun ContainerCard(
                         Icon(Icons.Default.Edit, contentDescription = null)
                     }
                 )
+
+                if (!container.useSparseImage) {
+                    DropdownMenuItem(
+                        text = { Text(context.getString(R.string.migrate_to_sparse_image)) },
+                        onClick = {
+                            showContextMenu = false
+                            onMigrate()
+                        },
+                        leadingIcon = {
+                            Icon(painterResource(id = R.drawable.ic_disk), contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
+                    )
+                } else {
+                    DropdownMenuItem(
+                        text = { Text(context.getString(R.string.resize_sparse_image)) },
+                        onClick = {
+                            showContextMenu = false
+                            onResize()
+                        },
+                        leadingIcon = {
+                            Icon(painterResource(id = R.drawable.ic_disk), contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
+                    )
+                }
+
                 DropdownMenuItem(
                     text = { Text(context.getString(R.string.uninstall_container_menu)) },
                     onClick = {

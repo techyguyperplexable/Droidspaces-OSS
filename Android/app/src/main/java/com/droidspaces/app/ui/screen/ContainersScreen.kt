@@ -28,6 +28,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarDuration
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import com.topjohnwu.superuser.Shell
 import com.droidspaces.app.util.ContainerManager
 import com.droidspaces.app.util.ContainerInfo
 import com.droidspaces.app.util.ContainerCommandBuilder
@@ -45,6 +46,8 @@ import com.droidspaces.app.ui.component.RootUnavailableState
 import com.droidspaces.app.ui.viewmodel.ContainerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.OutputStream
 import android.util.Log
 import com.droidspaces.app.R
 
@@ -52,6 +55,12 @@ import com.droidspaces.app.R
 private sealed class UninstallState {
     data object Idle : UninstallState()
     data class InProgress(val containerName: String, val message: String) : UninstallState()
+}
+
+// Sparse operation state
+private sealed class SparseOperation {
+    data class Migrate(val container: ContainerInfo) : SparseOperation()
+    data class Resize(val container: ContainerInfo) : SparseOperation()
 }
 
 @Composable
@@ -79,6 +88,9 @@ fun ContainersScreen(
     var showUninstallConfirmation by remember { mutableStateOf<ContainerInfo?>(null) }
     var uninstallState by remember { mutableStateOf<UninstallState>(UninstallState.Idle) }
     var uninstallLogsDialog by remember { mutableStateOf<List<String>?>(null) }
+
+    // Sparse operation state management
+    var pendingSparseOperation by remember { mutableStateOf<SparseOperation?>(null) }
 
     // File picker launcher - accept all files, validate internally
     // We don't filter in the picker (MIME types are unreliable for tar.xz/tar.gz)
@@ -301,11 +313,124 @@ fun ContainersScreen(
             // Save logs to cache when operation completes (only last action)
             prefsManager.saveContainerLogs(container.name, logs.toList())
 
-            // Add a tiny delay before clearing status to allow TerminalConsole 
+            // Add a generous delay before clearing status to allow TerminalConsole
             // to finish its final scroll animation for the "Success" message.
-            kotlinx.coroutines.delay(200)
+            kotlinx.coroutines.delay(500)
 
             // Clear running operation state (but keep console open)
+            runningOperationContainer = null
+        }
+    }
+
+    // Execute sparse image operation (migrate/resize)
+    suspend fun executeSparseOperation(operation: SparseOperation, sizeGb: Int) {
+        val container = when (operation) {
+            is SparseOperation.Migrate -> operation.container
+            is SparseOperation.Resize -> operation.container
+        }
+
+        // 1. Prepare terminal and logs
+        runningOperationContainer = container.name
+        val logs = if (!containerLogs.containsKey(container.name)) {
+            val newLogs = androidx.compose.runtime.mutableStateListOf<Pair<Int, String>>()
+            containerLogs = containerLogs.toMutableMap().apply { put(container.name, newLogs) }
+            newLogs
+        } else {
+            containerLogs[container.name]!!
+        }
+        logs.clear()
+        prefsManager.clearContainerLogs(container.name)
+        showLogViewerFor = container.name
+
+        val logger = ViewModelLogger { level, message ->
+            logs.add(level to message)
+        }.apply { verbose = true }
+
+        var scriptFile: File? = null
+        try {
+            // 2. Stop container if running
+            val isRunning = ContainerManager.checkContainerStatus(container.name).first
+            if (isRunning) {
+                logger.i(context.getString(R.string.stopping_container))
+                val stopCommand = ContainerCommandBuilder.buildStopCommand(container)
+                val stopResult = ContainerOperationExecutor.executeCommand(stopCommand, "stop", logger)
+                if (!stopResult) {
+                    logger.e(context.getString(R.string.failed_to_stop_container, container.name))
+                    return
+                }
+                // Small delay to ensure cleanup
+                kotlinx.coroutines.delay(1000)
+            }
+
+            // 3. Deploy sparsemgr.sh from assets
+            val deployedFile = File("${context.cacheDir}/sparsemgr.sh")
+            scriptFile = deployedFile
+            context.assets.open("sparsemgr.sh").use { input ->
+                deployedFile.outputStream().use { output: OutputStream ->
+                    input.copyTo(output)
+                }
+            }
+            Shell.cmd("chmod 755 \"${deployedFile.absolutePath}\"").exec()
+
+            // 4. Build and execute command
+            val baseDir = ContainerManager.getContainerDirectory(container.name)
+            val cmd = when (operation) {
+                is SparseOperation.Migrate -> {
+                    logger.i(context.getString(R.string.starting_migration))
+                    "\"${deployedFile.absolutePath}\" -d \"$baseDir\" migrate $sizeGb"
+                }
+                is SparseOperation.Resize -> {
+                    logger.i(context.getString(R.string.starting_resizing))
+                    val imgPath = ContainerManager.getSparseImagePath(container.name)
+                    "\"${deployedFile.absolutePath}\" -i \"$imgPath\" resize $sizeGb --yes"
+                }
+            }
+
+            val success = ContainerOperationExecutor.executeCommand(
+                command = cmd,
+                operation = "sparse_op",
+                logger = logger,
+                skipHeader = true,
+                operationCompletedMessage = context.getString(R.string.operation_completed_success)
+            )
+
+            if (success) {
+                // 5. Update container config on success
+                logger.i("Updating container configuration...")
+                val updatedConfig = if (operation is SparseOperation.Migrate) {
+                    container.copy(
+                        useSparseImage = true,
+                        sparseImageSizeGB = sizeGb,
+                        rootfsPath = if (container.rootfsPath.endsWith(".img")) container.rootfsPath else "${container.rootfsPath}.img"
+                    )
+                } else {
+                    container.copy(
+                        sparseImageSizeGB = sizeGb
+                    )
+                }
+                val configResult = withContext(Dispatchers.IO) {
+                    ContainerManager.updateContainerConfig(context, container.name, updatedConfig)
+                }
+
+                if (configResult.isSuccess) {
+                    logger.i("Configuration updated successfully")
+                    containerViewModel.refresh()
+                } else {
+                    logger.w("Warning: Failed to update container.config: ${configResult.exceptionOrNull()?.message}")
+                }
+            } else {
+                logger.e(context.getString(R.string.operation_failed))
+            }
+
+        } catch (e: Exception) {
+            logger.e("Error during sparse operation: ${e.message}")
+            logger.e(e.stackTraceToString())
+        } finally {
+            scriptFile?.delete()
+            prefsManager.saveContainerLogs(container.name, logs.toList())
+            // Add a generous delay before clearing status to allow TerminalConsole
+            // to finish its final scroll animation for the "Update Config" message.
+            kotlinx.coroutines.delay(500)
             runningOperationContainer = null
         }
     }
@@ -367,6 +492,12 @@ fun ContainersScreen(
                             },
                             onUninstall = {
                                 showUninstallConfirmation = container
+                            },
+                            onMigrate = {
+                                pendingSparseOperation = SparseOperation.Migrate(container)
+                            },
+                            onResize = {
+                                pendingSparseOperation = SparseOperation.Resize(container)
                             }
                         )
                     }
@@ -459,7 +590,89 @@ fun ContainersScreen(
                 onDismiss = { uninstallLogsDialog = null }
             )
         }
+
+        // Sparse operation size dialog
+        pendingSparseOperation?.let { op ->
+            val container = when (op) {
+                is SparseOperation.Migrate -> op.container
+                is SparseOperation.Resize -> op.container
+            }
+
+            SparseSizeDialog(
+                title = context.getString(
+                    if (op is SparseOperation.Migrate) R.string.migrate_dialog_title
+                    else R.string.resize_dialog_title
+                ),
+                message = context.getString(
+                    if (op is SparseOperation.Migrate) R.string.migrate_dialog_message
+                    else R.string.resize_dialog_message,
+                    container.name
+                ),
+                initialSize = container.sparseImageSizeGB ?: 8,
+                onConfirm = { size ->
+                    pendingSparseOperation = null
+                    scope.launch {
+                        executeSparseOperation(op, size)
+                    }
+                },
+                onDismiss = { pendingSparseOperation = null }
+            )
+        }
     }
+}
+
+@Composable
+private fun SparseSizeDialog(
+    title: String,
+    message: String,
+    initialSize: Int,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var sizeText by remember { mutableStateOf(initialSize.toString()) }
+    val size = sizeText.toIntOrNull()
+    val isValid = size != null && size in 4..512
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium)
+
+                OutlinedTextField(
+                    value = sizeText,
+                    onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) sizeText = it },
+                    label = { Text(context.getString(R.string.size_gb)) },
+                    placeholder = { Text("4-512") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = !isValid,
+                    supportingText = {
+                        if (!isValid) Text(context.getString(R.string.enter_size_between_4_512_gb))
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { size?.let { onConfirm(it) } },
+                enabled = isValid
+            ) {
+                Text(context.getString(R.string.continue_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(context.getString(R.string.cancel))
+            }
+        },
+        shape = RoundedCornerShape(28.dp)
+    )
 }
 
 @Composable

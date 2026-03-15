@@ -98,12 +98,18 @@ fun TerminalConsole(
     val horizontalScrollState = rememberScrollState()
 
     var userScrolledUp by remember { mutableStateOf(false) }
+    var isAutoScrolling by remember { mutableStateOf(false) }
 
     // Read-only observer — never mutates scroll state, so zero conflict with animations
     LaunchedEffect(verticalScrollState) {
         snapshotFlow { verticalScrollState.value }
             .collect { value ->
-                userScrolledUp = value < verticalScrollState.maxValue - 200
+                // Only track user scrolling if we aren't currently auto-scrolling.
+                // This prevents the animation itself from triggering "userScrolledUp"
+                // due to measurement delays or extreme log bursts.
+                if (!isAutoScrolling) {
+                    userScrolledUp = value < verticalScrollState.maxValue - 200
+                }
             }
     }
 
@@ -111,6 +117,7 @@ fun TerminalConsole(
     LaunchedEffect(isProcessing) {
         if (isProcessing) {
             userScrolledUp = false
+            isAutoScrolling = false
         }
     }
 
@@ -119,13 +126,19 @@ fun TerminalConsole(
         if (!userScrolledUp) {
             // Wait for measurement to stabilize before animating
             kotlinx.coroutines.delay(50)
-            verticalScrollState.animateScrollTo(
-                value = verticalScrollState.maxValue,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessLow
+            isAutoScrolling = true
+            try {
+                verticalScrollState.animateScrollTo(
+                    value = verticalScrollState.maxValue,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
                 )
-            )
+            } finally {
+                // Ensure we reset auto-scrolling flag even if cancelled
+                isAutoScrolling = false
+            }
         }
     }
 
