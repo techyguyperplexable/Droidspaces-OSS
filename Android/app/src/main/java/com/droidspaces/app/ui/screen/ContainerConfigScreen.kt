@@ -26,6 +26,8 @@ import com.droidspaces.app.ui.component.SettingsRowCard
 import com.droidspaces.app.ui.component.EnvironmentVariablesDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -544,7 +546,8 @@ fun ContainerConfigScreen(
                                                 label = { Text(context.getString(R.string.host_port_hint)) },
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                isError = !isHostValid
+                                                isError = !isHostValid,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                             )
                                             
                                             OutlinedTextField(
@@ -553,7 +556,8 @@ fun ContainerConfigScreen(
                                                 label = { Text(context.getString(R.string.container_port_hint)) },
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                isError = !isContainerValid
+                                                isError = !isContainerValid,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                             )
                                             
                                             ExposedDropdownMenuBox(
