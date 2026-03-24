@@ -60,7 +60,7 @@
  * ---------------------------------------------------------------------------*/
 
 #define DS_PROJECT_NAME "Droidspaces"
-#define DS_VERSION "5.7.1"
+#define DS_VERSION "5.8.0"
 #define DS_MIN_KERNEL_MAJOR 3
 #define DS_MIN_KERNEL_MINOR 18
 #define DS_RECOMMENDED_KERNEL_MAJOR 4
@@ -245,11 +245,11 @@ struct ds_tty_info {
 #define DS_MAX_UPSTREAM_IFACES 32
 
 struct ds_port_forward {
-  uint16_t host_port;      /* port on the Android/Linux host  */
-  uint16_t host_port_end;  /* end of range (0 if single) */
-  uint16_t container_port; /* port inside the container       */
+  uint16_t host_port;          /* port on the Android/Linux host  */
+  uint16_t host_port_end;      /* end of range (0 if single) */
+  uint16_t container_port;     /* port inside the container       */
   uint16_t container_port_end; /* end of range (0 if single) */
-  char proto[4];           /* "tcp" or "udp"                  */
+  char proto[4];               /* "tcp" or "udp"                  */
 };
 
 struct ds_config {
