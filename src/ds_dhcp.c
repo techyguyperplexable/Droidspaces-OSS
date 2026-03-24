@@ -113,6 +113,12 @@ typedef struct {
   uint8_t server_mac[6]; /* Bridge's MAC */
   volatile sig_atomic_t stop;
   pthread_t tid; /* Server thread ID */
+  /* Startup synchronization: ds_dhcp_server_start() blocks until the thread
+   * has finished socket setup and logged "DHCP Server started", ensuring the
+   * log line always appears before any subsequent caller logs (port forwards,
+   * boot message, foreground prompt). */
+  pthread_cond_t ready_cond;
+  int ready; /* set to 1 by thread once past bind() */
 } ds_dhcp_ctx_t;
 
 static ds_dhcp_ctx_t g_dhcp;
@@ -333,6 +339,10 @@ static void *dhcp_server_loop(void *arg) {
   packet_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
   if (packet_sock < 0) {
     ds_warn("[DHCP] packet socket: %s", strerror(errno));
+    pthread_mutex_lock(&g_dhcp_lock);
+    ctx->ready = 1;
+    pthread_cond_signal(&ctx->ready_cond);
+    pthread_mutex_unlock(&g_dhcp_lock);
     goto out;
   }
 
@@ -344,10 +354,22 @@ static void *dhcp_server_loop(void *arg) {
 
   if (bind(packet_sock, (struct sockaddr *)&sll, sizeof(sll)) < 0) {
     ds_warn("[DHCP] packet bind(%s): %s", ctx->iface, strerror(errno));
+    pthread_mutex_lock(&g_dhcp_lock);
+    ctx->ready = 1;
+    pthread_cond_signal(&ctx->ready_cond);
+    pthread_mutex_unlock(&g_dhcp_lock);
     goto out;
   }
 
   ds_log("DHCP Server started on %s  offer=%s", ctx->iface, offer_str);
+
+  /* Signal the launcher that we are fully up and the log line has been
+   * emitted.  From this point the caller's subsequent logs (port forwards,
+   * boot message, foreground prompt) will always appear after us. */
+  pthread_mutex_lock(&g_dhcp_lock);
+  ctx->ready = 1;
+  pthread_cond_signal(&ctx->ready_cond);
+  pthread_mutex_unlock(&g_dhcp_lock);
 
   struct pollfd fds[2];
   fds[0].fd = packet_sock;
@@ -572,6 +594,10 @@ void ds_dhcp_server_start(struct ds_config *cfg, const char *veth_host,
    * and avoids having two threads access ctx->sock during teardown/start. */
   g_dhcp.sock = -1;
 
+  /* ── Init startup synchronization ───────────────────────────────────── */
+  g_dhcp.ready = 0;
+  pthread_cond_init(&g_dhcp.ready_cond, NULL);
+
   /* ── Spawn joinable thread ─────────────────────────────────────────── */
   /* Joinable (default) so ds_dhcp_server_stop() can pthread_join() and
    * guarantee the thread has fully exited before the next start() call
@@ -580,7 +606,19 @@ void ds_dhcp_server_start(struct ds_config *cfg, const char *veth_host,
   if (pthread_create(&g_dhcp.tid, NULL, dhcp_server_loop, &g_dhcp) != 0) {
     ds_warn("[DHCP] pthread_create: %s", strerror(errno));
     g_dhcp.sock = -1;
+    pthread_mutex_unlock(&g_dhcp_lock);
+    return;
   }
+
+  /* Block until the thread has bound its socket and emitted the
+   * "DHCP Server started" log line (or failed).  This guarantees that
+   * all subsequent caller logs — port forwards, boot message, foreground
+   * prompt — are always sequenced strictly after the DHCP line.
+   *
+   * pthread_cond_wait atomically releases g_dhcp_lock while sleeping,
+   * so the DHCP thread can acquire it to set ready=1 and signal us. */
+  while (!g_dhcp.ready)
+    pthread_cond_wait(&g_dhcp.ready_cond, &g_dhcp_lock);
 
   pthread_mutex_unlock(&g_dhcp_lock);
 }
@@ -610,6 +648,7 @@ void ds_dhcp_server_stop(void) {
       close(g_dhcp.stop_efd);
       g_dhcp.stop_efd = -1;
     }
+    pthread_cond_destroy(&g_dhcp.ready_cond);
     pthread_mutex_unlock(&g_dhcp_lock);
   }
 }
