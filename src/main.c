@@ -585,10 +585,10 @@ int main(int argc, char **argv) {
       break;
 
     case 258: {
-      /* --port HOST:CONTAINER[/proto]  (comma-separated list allowed) */
-      char tmp[256];
-      strncpy(tmp, optarg, sizeof(tmp) - 1);
-      tmp[sizeof(tmp) - 1] = '\0';
+      /* --port HOST:CONTAINER[/proto]  (comma-separated list allowed), supports
+       * ranges */
+      char tmp[1024];
+      safe_strncpy(tmp, optarg, sizeof(tmp));
       char *saveptr;
       char *tok = strtok_r(tmp, ",", &saveptr);
       while (tok) {
@@ -597,12 +597,15 @@ int main(int argc, char **argv) {
           ret = 1;
           goto cleanup;
         }
-        struct ds_port_forward *pf = &cfg.port_forwards[cfg.port_forward_count];
 
-        /* Default proto */
+        while (*tok == ' ' || *tok == '\t')
+          tok++;
+
+        struct ds_port_forward *pf = &cfg.port_forwards[cfg.port_forward_count];
+        memset(pf, 0, sizeof(*pf));
         strncpy(pf->proto, "tcp", sizeof(pf->proto));
 
-        /* Optional /proto suffix */
+        /* Strip optional /proto suffix */
         char *slash = strchr(tok, '/');
         if (slash) {
           *slash = '\0';
@@ -616,37 +619,143 @@ int main(int argc, char **argv) {
           }
         }
 
-        /* HOST:CONTAINER */
+        /* Split HOST:CONTAINER or symmetric PORT */
+        char *host_side = tok;
+        char *cont_side = tok;
         char *colon = strchr(tok, ':');
-        if (!colon) {
-          ds_error(
-              "Invalid --port format '%s' (expected HOST:CONTAINER[/proto])",
-              tok);
-          ret = 1;
-          goto cleanup;
+        if (colon) {
+          *colon = '\0';
+          cont_side = colon + 1;
         }
-        *colon = '\0';
-        int hp = atoi(tok);
-        int cp = atoi(colon + 1);
-        if (hp <= 0 || hp > 65535 || cp <= 0 || cp > 65535) {
-          ds_error("Invalid port numbers in --port '%s:%s'", tok, colon + 1);
-          ret = 1;
-          goto cleanup;
-        }
-        int dup = 0;
-        for (int i = 0; i < cfg.port_forward_count; i++) {
-          if (cfg.port_forwards[i].host_port == (uint16_t)hp &&
-              cfg.port_forwards[i].container_port == (uint16_t)cp &&
-              strcmp(cfg.port_forwards[i].proto, pf->proto) == 0) {
-            dup = 1;
-            break;
+
+        int valid = 1;
+        /* Host side parsing */
+        {
+          char *dash = strchr(host_side, '-');
+          if (dash) {
+            int a = atoi(host_side), b = atoi(dash + 1);
+            if (a <= 0 || a > 65535 || b < a || b > 65535) {
+              ds_error("Invalid host port range '%s' in --port", host_side);
+              valid = 0;
+            } else {
+              pf->host_port = (uint16_t)a;
+              pf->host_port_end = (uint16_t)b;
+            }
+          } else {
+            int p = atoi(host_side);
+            if (p <= 0 || p > 65535) {
+              ds_error("Invalid host port '%s' in --port", host_side);
+              valid = 0;
+            } else {
+              pf->host_port = (uint16_t)p;
+              pf->host_port_end = 0;
+            }
           }
         }
-        if (!dup) {
-          pf->host_port = (uint16_t)hp;
-          pf->container_port = (uint16_t)cp;
-          cfg.port_forward_count++;
+
+        /* Container side parsing */
+        if (valid) {
+          char *dash = strchr(cont_side, '-');
+          if (dash) {
+            int a = atoi(cont_side), b = atoi(dash + 1);
+            if (a <= 0 || a > 65535 || b < a || b > 65535) {
+              ds_error("Invalid container port range '%s' in --port",
+                       cont_side);
+              valid = 0;
+            } else {
+              pf->container_port = (uint16_t)a;
+              pf->container_port_end = (uint16_t)b;
+            }
+          } else {
+            int p = atoi(cont_side);
+            if (p <= 0 || p > 65535) {
+              ds_error("Invalid container port '%s' in --port", cont_side);
+              valid = 0;
+            } else {
+              pf->container_port = (uint16_t)p;
+              pf->container_port_end = 0;
+            }
+          }
         }
+
+        if (!valid) {
+          ret = 1;
+          goto cleanup;
+        }
+
+        /* Width mismatch check */
+        int hw = pf->host_port_end ? (pf->host_port_end - pf->host_port) : 0;
+        int cw = pf->container_port_end
+                     ? (pf->container_port_end - pf->container_port)
+                     : 0;
+        if (hw != cw) {
+          ds_error("Port range width mismatch in --port: host %d vs container %d",
+                   hw + 1, cw + 1);
+          ret = 1;
+          goto cleanup;
+        }
+
+        /* Conflict/Intersection check - Venn diagram logic:
+         * Reject if host OR container ranges overlap with any existing rule
+         * of the same protocol.  Two ranges [s1,e1] and [s2,e2] overlap
+         * iff s1 <= e2 && s2 <= e1. */
+        for (int i = 0; i < cfg.port_forward_count; i++) {
+          struct ds_port_forward *ex = &cfg.port_forwards[i];
+          if (strcmp(ex->proto, pf->proto) != 0)
+            continue;
+
+          /* Exact duplicate - silently skip */
+          if (pf->host_port == ex->host_port &&
+              pf->host_port_end == ex->host_port_end &&
+              pf->container_port == ex->container_port &&
+              pf->container_port_end == ex->container_port_end) {
+            goto skip_tok;
+          }
+
+          /* Host-side overlap */
+          uint16_t hs1 = pf->host_port,
+                   he1 = pf->host_port_end ? pf->host_port_end : pf->host_port;
+          uint16_t hs2 = ex->host_port,
+                   he2 = ex->host_port_end ? ex->host_port_end : ex->host_port;
+          int host_overlap = (hs1 <= he2 && hs2 <= he1);
+
+          /* Container-side overlap */
+          uint16_t cs1 = pf->container_port,
+                   ce1 = pf->container_port_end ? pf->container_port_end
+                                                : pf->container_port;
+          uint16_t cs2 = ex->container_port,
+                   ce2 = ex->container_port_end ? ex->container_port_end
+                                                : ex->container_port;
+          int cont_overlap = (cs1 <= ce2 && cs2 <= ce1);
+
+          if (host_overlap || cont_overlap) {
+            char pf_str[32], ex_str[32];
+            const char *side = host_overlap ? "Host" : "Container";
+
+            if (host_overlap) {
+              snprintf(pf_str, sizeof(pf_str), "%u%s%u", pf->host_port,
+                       pf->host_port_end ? "-" : "", pf->host_port_end);
+              snprintf(ex_str, sizeof(ex_str), "%u%s%u", ex->host_port,
+                       ex->host_port_end ? "-" : "", ex->host_port_end);
+            } else {
+              snprintf(pf_str, sizeof(pf_str), "%u%s%u", pf->container_port,
+                       pf->container_port_end ? "-" : "",
+                       pf->container_port_end);
+              snprintf(ex_str, sizeof(ex_str), "%u%s%u", ex->container_port,
+                       ex->container_port_end ? "-" : "",
+                       ex->container_port_end);
+            }
+
+            ds_warn("%s port conflict: %s/%s overlaps with existing "
+                    "mapping %s/%s - skipping",
+                    side, pf_str, pf->proto, ex_str, ex->proto);
+            goto skip_tok;
+          }
+        }
+
+        cfg.port_forward_count++;
+
+      skip_tok:
         tok = strtok_r(NULL, ",", &saveptr);
       }
       break;

@@ -1104,11 +1104,21 @@ int ds_ipt_add_portforwards(struct ds_config *cfg, const char *container_ip) {
   for (int i = 0; i < cfg->port_forward_count; i++) {
     struct ds_port_forward *pf = &cfg->port_forwards[i];
 
-    char host_port_str[8], cont_port_str[8], to_dest[64];
-    snprintf(host_port_str, sizeof(host_port_str), "%u", pf->host_port);
-    snprintf(cont_port_str, sizeof(cont_port_str), "%u", pf->container_port);
-    snprintf(to_dest, sizeof(to_dest), "%s:%u", container_ip,
-             pf->container_port);
+    char host_port_str[16], cont_port_str[16], to_dest[80];
+    if (pf->host_port_end) {
+      /* Range syntax: START:END for --dport, START-END for --to-destination */
+      snprintf(host_port_str, sizeof(host_port_str), "%u:%u", pf->host_port,
+               pf->host_port_end);
+      snprintf(cont_port_str, sizeof(cont_port_str), "%u:%u", pf->container_port,
+               pf->container_port_end);
+      snprintf(to_dest, sizeof(to_dest), "%s:%u-%u", container_ip,
+               pf->container_port, pf->container_port_end);
+    } else {
+      snprintf(host_port_str, sizeof(host_port_str), "%u", pf->host_port);
+      snprintf(cont_port_str, sizeof(cont_port_str), "%u", pf->container_port);
+      snprintf(to_dest, sizeof(to_dest), "%s:%u", container_ip,
+               pf->container_port);
+    }
 
     ds_log("portforward: %s %s -> %s", pf->proto, host_port_str, to_dest);
 
@@ -1189,11 +1199,20 @@ int ds_ipt_remove_portforwards(struct ds_config *cfg) {
   for (int i = 0; i < cfg->port_forward_count; i++) {
     struct ds_port_forward *pf = &cfg->port_forwards[i];
 
-    char host_port_str[8], cont_port_str[8], to_dest[64];
-    snprintf(host_port_str, sizeof(host_port_str), "%u", pf->host_port);
-    snprintf(cont_port_str, sizeof(cont_port_str), "%u", pf->container_port);
-    snprintf(to_dest, sizeof(to_dest), "%s:%u", container_ip,
-             pf->container_port);
+    char host_port_str[16], cont_port_str[16], to_dest[80];
+    if (pf->host_port_end) {
+      snprintf(host_port_str, sizeof(host_port_str), "%u:%u", pf->host_port,
+               pf->host_port_end);
+      snprintf(cont_port_str, sizeof(cont_port_str), "%u:%u", pf->container_port,
+               pf->container_port_end);
+      snprintf(to_dest, sizeof(to_dest), "%s:%u-%u", container_ip,
+               pf->container_port, pf->container_port_end);
+    } else {
+      snprintf(host_port_str, sizeof(host_port_str), "%u", pf->host_port);
+      snprintf(cont_port_str, sizeof(cont_port_str), "%u", pf->container_port);
+      snprintf(to_dest, sizeof(to_dest), "%s:%u", container_ip,
+               pf->container_port);
+    }
 
     /* Delete PREROUTING DNAT — args must mirror the insert exactly */
     char *del_dnat[] = {

@@ -281,7 +281,13 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
                 "ignored",
                 DS_MAX_UPSTREAM_IFACES);
     } else if (strcmp(key, "port_forwards") == 0) {
-      /* Comma-separated HOST:CONTAINER[/proto], e.g. "22:22/tcp,8096:8096" */
+      /* Comma-separated HOST:CONTAINER[/proto], supporting both single ports
+       * and ranges.  Accepted formats:
+       *   22:22/tcp          single port, explicit proto
+       *   8096:8096          single port, default tcp
+       *   1-500:1-500/tcp    range, both sides must have equal width
+       *   1-500              symmetric range shorthand (host == container)
+       */
       char copy[1024];
       safe_strncpy(copy, val, sizeof(copy));
       char *pf_saveptr;
@@ -289,37 +295,147 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
       while (pf_tok && cfg->port_forward_count < DS_MAX_PORT_FORWARDS) {
         while (*pf_tok == ' ' || *pf_tok == '\t')
           pf_tok++;
+
         struct ds_port_forward *pf =
             &cfg->port_forwards[cfg->port_forward_count];
+        memset(pf, 0, sizeof(*pf));
         strncpy(pf->proto, "tcp", sizeof(pf->proto));
+
+        /* Strip optional /proto suffix */
         char *slash = strchr(pf_tok, '/');
         if (slash) {
           *slash = '\0';
           strncpy(pf->proto, slash + 1, sizeof(pf->proto) - 1);
           pf->proto[sizeof(pf->proto) - 1] = '\0';
         }
+
+        /* Split HOST_SIDE:CONTAINER_SIDE.
+         * No colon → symmetric: both sides are the same spec. */
+        char *host_side = pf_tok;
+        char *cont_side = pf_tok; /* symmetric default */
         char *colon = strchr(pf_tok, ':');
         if (colon) {
           *colon = '\0';
-          int hp = atoi(pf_tok);
-          int cp = atoi(colon + 1);
-          if (hp > 0 && hp <= 65535 && cp > 0 && cp <= 65535) {
-            int dup = 0;
-            for (int i = 0; i < cfg->port_forward_count; i++) {
-              if (cfg->port_forwards[i].host_port == (uint16_t)hp &&
-                  cfg->port_forwards[i].container_port == (uint16_t)cp &&
-                  strcmp(cfg->port_forwards[i].proto, pf->proto) == 0) {
-                dup = 1;
-                break;
-              }
+          cont_side = colon + 1;
+        }
+
+        /* Parse a single "PORT" or "START-END" spec into (port, port_end).
+         * Returns 1 on success, 0 on parse/range error. */
+        int valid = 1;
+
+        /* Host side */
+        {
+          char *dash = strchr(host_side, '-');
+          if (dash) {
+            int a = atoi(host_side), b = atoi(dash + 1);
+            if (a <= 0 || a > 65535 || b < a || b > 65535) {
+              ds_warn("config: invalid host port range '%s' - skipping",
+                      host_side);
+              valid = 0;
+            } else {
+              pf->host_port = (uint16_t)a;
+              pf->host_port_end = (uint16_t)b;
             }
-            if (!dup) {
-              pf->host_port = (uint16_t)hp;
-              pf->container_port = (uint16_t)cp;
-              cfg->port_forward_count++;
+          } else {
+            int p = atoi(host_side);
+            if (p <= 0 || p > 65535) {
+              ds_warn("config: invalid host port '%s' - skipping", host_side);
+              valid = 0;
+            } else {
+              pf->host_port = (uint16_t)p;
+              pf->host_port_end = 0;
             }
           }
         }
+
+        /* Container side */
+        if (valid) {
+          char *dash = strchr(cont_side, '-');
+          if (dash) {
+            int a = atoi(cont_side), b = atoi(dash + 1);
+            if (a <= 0 || a > 65535 || b < a || b > 65535) {
+              ds_warn("config: invalid container port range '%s' - skipping",
+                      cont_side);
+              valid = 0;
+            } else {
+              pf->container_port = (uint16_t)a;
+              pf->container_port_end = (uint16_t)b;
+            }
+          } else {
+            int p = atoi(cont_side);
+            if (p <= 0 || p > 65535) {
+              ds_warn("config: invalid container port '%s' - skipping",
+                      cont_side);
+              valid = 0;
+            } else {
+              pf->container_port = (uint16_t)p;
+              pf->container_port_end = 0;
+            }
+          }
+        }
+
+        /* Both sides must span the same number of ports */
+        if (valid) {
+          int hw = pf->host_port_end ? (pf->host_port_end - pf->host_port) : 0;
+          int cw = pf->container_port_end
+                       ? (pf->container_port_end - pf->container_port)
+                       : 0;
+          if (hw != cw) {
+            ds_warn("config: port_forwards range width mismatch "
+                    "(host %d ports vs container %d ports) - skipping",
+                    hw + 1, cw + 1);
+            valid = 0;
+          }
+        }
+
+        /* Overlap check - reject if host OR container ranges intersect
+         * with any existing rule of the same protocol. */
+        if (valid) {
+          int skip = 0;
+          for (int i = 0; i < cfg->port_forward_count; i++) {
+            struct ds_port_forward *ex = &cfg->port_forwards[i];
+            if (strcmp(ex->proto, pf->proto) != 0)
+              continue;
+
+            /* Exact duplicate - silently skip */
+            if (pf->host_port == ex->host_port &&
+                pf->host_port_end == ex->host_port_end &&
+                pf->container_port == ex->container_port &&
+                pf->container_port_end == ex->container_port_end) {
+              skip = 1;
+              break;
+            }
+
+            /* Host-side overlap */
+            uint16_t hs1 = pf->host_port,
+                     he1 = pf->host_port_end ? pf->host_port_end
+                                             : pf->host_port;
+            uint16_t hs2 = ex->host_port,
+                     he2 = ex->host_port_end ? ex->host_port_end
+                                             : ex->host_port;
+            int host_overlap = (hs1 <= he2 && hs2 <= he1);
+
+            /* Container-side overlap */
+            uint16_t cs1 = pf->container_port,
+                     ce1 = pf->container_port_end ? pf->container_port_end
+                                                  : pf->container_port;
+            uint16_t cs2 = ex->container_port,
+                     ce2 = ex->container_port_end ? ex->container_port_end
+                                                  : ex->container_port;
+            int cont_overlap = (cs1 <= ce2 && cs2 <= ce1);
+
+            if (host_overlap || cont_overlap) {
+              ds_warn("config: port_forwards overlap detected (%s side) "
+                      "- skipping",
+                      host_overlap ? "host" : "container");
+              skip = 1;
+              break;
+            }
+          }
+          if (!skip)
+            cfg->port_forward_count++;
+        }
+
         pf_tok = strtok_r(NULL, ",", &pf_saveptr);
       }
       if (pf_tok)
@@ -435,9 +551,18 @@ int ds_config_save(const char *config_path, struct ds_config *cfg) {
   if (cfg->net_mode == DS_NET_NAT && cfg->port_forward_count > 0) {
     fprintf(f_out, "port_forwards=");
     for (int i = 0; i < cfg->port_forward_count; i++) {
-      fprintf(f_out, "%d:%d/%s%s", cfg->port_forwards[i].host_port,
-              cfg->port_forwards[i].container_port, cfg->port_forwards[i].proto,
-              (i < cfg->port_forward_count - 1) ? "," : "");
+      const struct ds_port_forward *pf = &cfg->port_forwards[i];
+      if (pf->host_port_end) {
+        /* Range mapping: START-END:START-END/proto */
+        fprintf(f_out, "%u-%u:%u-%u/%s", pf->host_port, pf->host_port_end,
+                pf->container_port, pf->container_port_end, pf->proto);
+      } else {
+        /* Single port: HOST:CONTAINER/proto */
+        fprintf(f_out, "%u:%u/%s", pf->host_port, pf->container_port,
+                pf->proto);
+      }
+      if (i < cfg->port_forward_count - 1)
+        fprintf(f_out, ",");
     }
     fprintf(f_out, "\n");
   }

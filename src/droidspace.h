@@ -245,7 +245,9 @@ struct ds_tty_info {
 
 struct ds_port_forward {
   uint16_t host_port;      /* port on the Android/Linux host  */
+  uint16_t host_port_end;  /* end of range (0 if single) */
   uint16_t container_port; /* port inside the container       */
+  uint16_t container_port_end; /* end of range (0 if single) */
   char proto[4];           /* "tcp" or "udp"                  */
 };
 

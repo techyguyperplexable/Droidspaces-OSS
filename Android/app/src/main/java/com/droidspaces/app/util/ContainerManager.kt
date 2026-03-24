@@ -19,8 +19,8 @@ data class BindMount(
 )
 
 data class PortForward(
-    val hostPort: Int,
-    val containerPort: Int,
+    val hostPort: String,
+    val containerPort: String? = null,
     val proto: String = "tcp"
 )
 
@@ -73,7 +73,10 @@ data class ContainerInfo(
             appendLine("upstream_interfaces=${upstreamInterfaces.joinToString(",")}")
         }
         if (netMode == "nat" && portForwards.isNotEmpty()) {
-            appendLine("port_forwards=${portForwards.joinToString(",") { "${it.hostPort}:${it.containerPort}/${it.proto}" }}")
+            appendLine("port_forwards=${portForwards.joinToString(",") { 
+                val mapping = if (it.containerPort != null) "${it.hostPort}:${it.containerPort}" else it.hostPort
+                "$mapping/${it.proto}"
+            }}")
         }
         if (dnsServers.isNotEmpty()) {
             appendLine("dns_servers=$dnsServers")
@@ -230,18 +233,16 @@ object ContainerManager {
             // Parse upstream interfaces
             val upstreamInterfaces = configMap["upstream_interfaces"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
 
-            // Parse port forwards: 8080:80/tcp,9090:90/udp
+            // Parse port forwards: 8080:80/tcp, 9090:90/udp, 1000-2000/tcp (shorthand)
             val portForwards = configMap["port_forwards"]?.split(",")?.mapNotNull { pfStr ->
                 try {
                     val parts = pfStr.trim().split("/")
                     val proto = if (parts.size > 1) parts[1].lowercase() else "tcp"
                     val portParts = parts[0].split(":")
                     if (portParts.size == 2) {
-                        val hostPort = portParts[0].toIntOrNull()
-                        val containerPort = portParts[1].toIntOrNull()
-                        if (hostPort != null && containerPort != null) {
-                            PortForward(hostPort, containerPort, proto)
-                        } else null
+                        PortForward(portParts[0].trim(), portParts[1].trim(), proto)
+                    } else if (portParts.size == 1 && portParts[0].isNotBlank()) {
+                        PortForward(portParts[0].trim(), null, proto)
                     } else null
                 } catch (e: Exception) { null }
             } ?: emptyList()

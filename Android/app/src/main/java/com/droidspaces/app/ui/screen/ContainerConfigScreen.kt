@@ -26,8 +26,6 @@ import com.droidspaces.app.ui.component.SettingsRowCard
 import com.droidspaces.app.ui.component.EnvironmentVariablesDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -487,8 +485,9 @@ fun ContainerConfigScreen(
                                 modifier = Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val targetText = if (pf.containerPort != null) " → ${pf.containerPort}" else " ${context.getString(R.string.symmetric_label)}"
                                 Text(
-                                    text = "${pf.hostPort} \u2192 ${pf.containerPort} [${pf.proto.uppercase()}]",
+                                    text = "${pf.hostPort}$targetText [${pf.proto.uppercase()}]",
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(onClick = { portForwards = portForwards - pf }) {
@@ -504,10 +503,68 @@ fun ContainerConfigScreen(
                         var containerPort by remember { mutableStateOf("") }
                         var protoExpanded by remember { mutableStateOf(false) }
                         var proto by remember { mutableStateOf("tcp") }
+
+                        fun validatePortSpec(spec: String): String? {
+                            if (spec.isBlank()) return null
+                            if (spec.contains("-")) {
+                                val parts = spec.split("-")
+                                if (parts.size != 2) return context.getString(R.string.error_invalid_range_format)
+                                val start = parts[0].toIntOrNull()
+                                val end = parts[1].toIntOrNull()
+                                if (start == null || end == null) return context.getString(R.string.error_ports_must_be_numbers)
+                                if (start !in 1..65535 || end !in 1..65535) return context.getString(R.string.error_port_out_of_range)
+                                if (start >= end) return context.getString(R.string.error_start_must_be_less_than_end)
+                                return null
+                            }
+                            val p = spec.toIntOrNull() ?: return context.getString(R.string.error_port_must_be_number)
+                            if (p !in 1..65535) return context.getString(R.string.error_port_out_of_range)
+                            return null
+                        }
+
+                        fun getWidth(spec: String): Int {
+                            if (spec.contains("-")) {
+                                val parts = spec.split("-")
+                                return (parts[1].toIntOrNull() ?: 0) - (parts[0].toIntOrNull() ?: 0)
+                            }
+                            return 0
+                        }
+
+                        val hostError = validatePortSpec(hostPort)
+                        val containerError = validatePortSpec(containerPort)
                         
-                        val isHostValid = hostPort.isBlank() || (hostPort.toIntOrNull() != null && hostPort.toInt() in 1..65535)
-                        val isContainerValid = containerPort.isBlank() || (containerPort.toIntOrNull() != null && containerPort.toInt() in 1..65535)
-                        val isFormValid = hostPort.isNotBlank() && isHostValid && containerPort.isNotBlank() && isContainerValid
+                        var widthError: String? = null
+                        if (hostError == null && containerError == null && hostPort.isNotBlank() && containerPort.isNotBlank()) {
+                            if (getWidth(hostPort) != getWidth(containerPort)) {
+                                widthError = context.getString(R.string.error_port_width_mismatch)
+                            }
+                        }
+
+                        // Overlap detection - computed reactively like widthError
+                        fun parseRange(spec: String): Pair<Int, Int> {
+                            if (spec.contains("-")) {
+                                val parts = spec.split("-")
+                                return (parts[0].toIntOrNull() ?: 0) to (parts[1].toIntOrNull() ?: 0)
+                            }
+                            val p = spec.toIntOrNull() ?: 0
+                            return p to p
+                        }
+                        fun rangesOverlap(a: Pair<Int, Int>, b: Pair<Int, Int>): Boolean =
+                            a.first <= b.second && b.first <= a.second
+
+                        var overlapError: String? = null
+                        if (hostError == null && containerError == null && widthError == null && hostPort.isNotBlank()) {
+                            val newHost = parseRange(hostPort.trim())
+                            val newCont = parseRange((if (containerPort.isBlank()) hostPort else containerPort).trim())
+                            val hasOverlap = portForwards.any { ex ->
+                                if (ex.proto != proto) return@any false
+                                val exHost = parseRange(ex.hostPort)
+                                val exCont = parseRange(ex.containerPort ?: ex.hostPort)
+                                rangesOverlap(newHost, exHost) || rangesOverlap(newCont, exCont)
+                            }
+                            if (hasOverlap) overlapError = context.getString(R.string.error_port_overlap)
+                        }
+
+                        val isFormValid = hostPort.isNotBlank() && hostError == null && containerError == null && widthError == null && overlapError == null
 
                         Dialog(
                             onDismissRequest = { showPortDialog = false },
@@ -515,7 +572,7 @@ fun ContainerConfigScreen(
                         ) {
                             Surface(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.92f)
+                                    .fillMaxWidth(0.95f)
                                     .wrapContentHeight(),
                                 shape = RoundedCornerShape(28.dp),
                                 color = MaterialTheme.colorScheme.surface
@@ -537,27 +594,34 @@ fun ContainerConfigScreen(
                                             .weight(1f, fill = false)
                                     ) {
                                         Column(
-                                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp),
                                             modifier = Modifier.verticalScroll(rememberScrollState())
                                         ) {
+                                            Text(
+                                                text = context.getString(R.string.port_forward_examples),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+
                                             OutlinedTextField(
                                                 value = hostPort,
-                                                onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() }) hostPort = it },
+                                                onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '-' }) hostPort = it },
                                                 label = { Text(context.getString(R.string.host_port_hint)) },
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                isError = !isHostValid,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                isError = hostError != null || widthError != null || overlapError != null,
+                                                supportingText = { Text(hostError ?: widthError ?: overlapError ?: "") }
                                             )
                                             
                                             OutlinedTextField(
                                                 value = containerPort,
-                                                onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() }) containerPort = it },
+                                                onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '-' }) containerPort = it },
                                                 label = { Text(context.getString(R.string.container_port_hint)) },
+                                                placeholder = { Text(context.getString(R.string.leave_blank_for_symmetric)) },
                                                 singleLine = true,
                                                 modifier = Modifier.fillMaxWidth(),
-                                                isError = !isContainerValid,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                isError = containerError != null || widthError != null || overlapError != null,
+                                                supportingText = { Text(containerError ?: widthError ?: overlapError ?: context.getString(R.string.optional_symmetric_hint)) }
                                             )
                                             
                                             ExposedDropdownMenuBox(
@@ -595,10 +659,12 @@ fun ContainerConfigScreen(
                                         Button(
                                             onClick = {
                                                 if (isFormValid) {
-                                                    val pf = PortForward(hostPort.toInt(), containerPort.toInt(), proto)
-                                                    if (!portForwards.contains(pf)) {
-                                                        portForwards = portForwards + pf
-                                                    }
+                                                    val pf = PortForward(
+                                                        hostPort.trim(),
+                                                        if (containerPort.isBlank()) null else containerPort.trim(),
+                                                        proto
+                                                    )
+                                                    portForwards = portForwards + pf
                                                     showPortDialog = false
                                                 }
                                             },
