@@ -419,7 +419,7 @@ int check_requirements_detailed(void) {
                  check_veth_support(), "OPT");
 
   /* FINAL SUMMARY */
-  check_append("\n" C_BOLD "Summary:" C_RESET "\n");
+  check_append("\n" C_BOLD "Summary:" C_RESET "\n\n");
   if (missing_must > 0)
     check_append(
         "  [" C_RED "✗" C_RESET

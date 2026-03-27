@@ -686,6 +686,22 @@ int start_rootfs(struct ds_config *cfg) {
       }
     }
 
+    /* Stdio handling for monitor in background mode (early redirection).
+     * We must do this BEFORE forking the intermediate process, otherwise
+     * the intermediate inherits the user's stdout/stderr (e.g. a pipe)
+     * and holds it open indefinitely, causing CLI hangs in direct mode.
+     * We only keep it open if we haven't reached the networking setup yet,
+     * as setup_veth_host_side() might still need to print logs. */
+    if (!cfg->foreground && !stdio_redirected) {
+      int devnull = open("/dev/null", O_RDWR);
+      if (devnull >= 0) {
+        dup2(devnull, 0);
+        /* Note: we don't redirect 1 and 2 here yet because we want to see
+         * networking setup logs. We'll do a full redirect after the fork. */
+        close(devnull);
+      }
+    }
+
     pid_t mid_pid = fork();
     if (mid_pid < 0)
       _exit(EXIT_FAILURE);
@@ -701,6 +717,19 @@ int start_rootfs(struct ds_config *cfg) {
       if (unshare(clone_flags) < 0) {
         ds_error("unshare(PID|NET) failed: %s", strerror(errno));
         _exit(EXIT_FAILURE);
+      }
+
+      /* Intermediate: redirect stdio to /dev/null immediately.
+       * It only exists to wait for init and has no business talking to the
+       * user's terminal or holding pipes open. */
+      if (!cfg->foreground) {
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+          dup2(devnull, 0);
+          dup2(devnull, 1);
+          dup2(devnull, 2);
+          close(devnull);
+        }
       }
 
       pid_t init_pid = fork();
@@ -1118,7 +1147,8 @@ int start_rootfs(struct ds_config *cfg) {
 cleanup:
   /* Centralized host-side cleanup IF we are returning error.
    * This ensures image mounts and tracking files are reverted on fatal boot
-   * errors. Only execute if we successfully crossed the point of creating effects. */
+   * errors. Only execute if we successfully crossed the point of creating
+   * effects. */
   if (has_side_effects) {
     cleanup_container_resources(cfg, cfg->container_pid, 0, 1 /* force */);
   }
@@ -1671,7 +1701,7 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
   /* Host info */
   const char *host = is_android() ? "Android" : "Linux";
   const char *arch = get_architecture();
-  printf(C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
+  printf("\n" C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
 
   /* Case 1: No container name specified */
   if (cfg->container_name[0] == '\0') {
