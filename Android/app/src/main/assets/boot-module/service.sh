@@ -10,12 +10,27 @@ CONTAINERS_DIR=${DROIDSPACE_DIR}/Containers
 DROIDSPACE_BINARY=${DROIDSPACE_DIR}/bin/droidspaces
 BUSYBOX_BINARY=${DROIDSPACE_DIR}/bin/busybox
 DAEMON_MODE_FILE=${DROIDSPACE_DIR}/.daemon_mode
+DMESG_PID_FILE=${DROIDSPACE_DIR}/.dmesg_pid
 
 mkdir -p "${LOGS_DIR}" 2>/dev/null
 exec >> "${LOGS_FILE}" 2>&1
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date +%s)] $*"
+}
+
+# Kill the dmesg -w process started in post-fs-data.sh.
+# Called at the end of both the native init path and the Magisk path
+# so we always stop capturing once autoboot is done.
+stop_dmesg_logger() {
+    if [ -f "${DMESG_PID_FILE}" ]; then
+        DMESG_PID="$(cat "${DMESG_PID_FILE}" 2>/dev/null)"
+        if [ -n "${DMESG_PID}" ] && kill -0 "${DMESG_PID}" 2>/dev/null; then
+            kill "${DMESG_PID}" 2>/dev/null
+            log "dmesg logger stopped (PID ${DMESG_PID})"
+        fi
+        rm -f "${DMESG_PID_FILE}"
+    fi
 }
 
 update_prop() {
@@ -42,6 +57,15 @@ if [ -f /vendor/bin/droidspaces ] || [ -L /vendor/bin/droidspaces ]; then
         log "WARNING: /vendor/bin/droidspaces found but daemon is not running"
         update_prop "🔴 Found daemon integrated in /vendor/bin/droidspaces, but seems like it's not running!"
     fi
+
+    # Wait for boot_completed so dmesg captures the autoboot service logs
+    # before we shut the logger down
+    while [ "$(getprop sys.boot_completed 2>/dev/null)" != "1" ]; do
+        sleep 1
+    done
+    # Give droidspaces_autoboot a moment to finish running
+    sleep 5
+    stop_dmesg_logger
     exit 0
 fi
 
@@ -131,5 +155,6 @@ for cfg in $(${BUSYBOX_BINARY} find "${CONTAINERS_DIR}" -name "container.config"
     fi
 done
 
+stop_dmesg_logger
 log "Boot Summary: Daemon: ${DAEMON_STATUS} | ${success} started | ${failed} failed"
 update_prop "Daemon: ${DAEMON_STATUS} | Containers: ${success} started, ${failed} failed"

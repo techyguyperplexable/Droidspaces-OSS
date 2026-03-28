@@ -14,8 +14,25 @@ DROIDSPACES_TE_FILE=${MODDIR}/etc/droidspaces.te
 # Create logs directory if it doesn't exist
 mkdir -p "${LOGS_DIR}" 2>/dev/null
 
-# Clear log file at boot start
+# Clear log files at boot start
 > "${LOGS_FILE}" 2>/dev/null
+> "${LOGS_DIR}/dmesg.log" 2>/dev/null
+
+# Start dmesg logger as early as possible so we capture the full boot.
+# We check common paths since not all devices have it in the same place.
+# The PID is saved so service.sh can kill it cleanly after autoboot finishes.
+DMESG_PID_FILE="${DROIDSPACE_DIR}/.dmesg_pid"
+if [ -f /system/bin/dmesg ]; then
+    DMESG_BIN=/system/bin/dmesg
+elif [ -f /vendor/bin/dmesg ]; then
+    DMESG_BIN=/vendor/bin/dmesg
+elif [ -f /system/vendor/bin/dmesg ]; then
+    DMESG_BIN=/system/vendor/bin/dmesg
+else
+    DMESG_BIN=dmesg
+fi
+"${DMESG_BIN}" -w >> "${LOGS_DIR}/dmesg.log" 2>/dev/null &
+echo $! > "${DMESG_PID_FILE}"
 
 # Function to log with timestamp
 log() {
