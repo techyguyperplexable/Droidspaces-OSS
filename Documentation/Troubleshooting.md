@@ -11,6 +11,7 @@ Common issues, their causes, and how to fix them.
 - [Systemd Hangs on Older Kernels](#systemd-hangs-on-older-kernels)
 - [Container Won't Stop](#container-wont-stop)
 - [Rootfs Image I/O Errors on Android](#rootfs-image-io-errors-on-android)
+- [Networking is completely dead - ping fails with "socket: permission denied"](#paranoid-networking)
 - [DNS / Name Resolution Issues](#dns--name-resolution-issues)
 - [WiFi/Mobile Data Disconnects](#wifimobile-data-disconnects)
 - [NAT Mode: No Internet / IPv6-Only Upstream](#ipv4-quirks)
@@ -151,6 +152,31 @@ You can also manually apply the context:
 ```bash
 chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 ```
+
+---
+
+<a id="paranoid-networking"></a>
+
+## Networking is completely dead - ping fails with "socket: permission denied"
+
+**Symptoms:** You have no internet access inside the container. Even basic commands like `ping` fail immediately with a `socket: permission denied` error, even when running as root.
+
+**Cause:** This is caused by **Android Paranoid Networking**, a security feature found in many Android kernels (especially version 4.14 and older). Unlike standard Linux, the Android kernel restricts network socket creation to specific supplementary Group IDs (GIDs). Without these specific IDs, the kernel's security hooks block the process:
+
+* **AID_INET (3003):** Required to create any AF_INET/AF_INET6 socket. Without this, `connect()` and `bind()` calls fail.
+* **AID_NET_RAW (3004):** Required for `ping` and other raw networking tasks.
+* **AID_NET_ADMIN (3005):** Required for network configuration and routing tasks.
+
+**Solutions:**
+
+- **Kernel Level Fix:** If you are building your own kernel, the most effective solution is to disable this restriction entirely in your kernel configuration:
+  ```bash
+  CONFIG_ANDROID_PARANOID_NETWORK=n
+  ```
+
+- **Userland Fix:** Use a rootfs that has been specifically patched to include these Android-specific GIDs in the group database. Our official rootfs tarballs come pre-configured to handle these permission requirements:
+
+   [Droidspaces-rootfs-builder Releases](https://github.com/ravindu644/Droidspaces-rootfs-builder/releases/latest)
 
 ---
 
