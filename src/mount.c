@@ -470,7 +470,7 @@ static void prune_host_devices(const char *dev_path) {
  * /dev setup
  * ---------------------------------------------------------------------------*/
 
-int setup_dev(const char *rootfs, int hw_access) {
+int setup_dev(const char *rootfs, int hw_access, int gpu_mode) {
   char dev_path[PATH_MAX];
   snprintf(dev_path, sizeof(dev_path), "%s/dev", rootfs);
 
@@ -492,7 +492,9 @@ int setup_dev(const char *rootfs, int hw_access) {
        * that Android's ueventd created in its tmpfs-based /dev (kgsl-3d0,
        * mali0, dri/renderD128, etc.).  Mirror any missing GPU/hardware nodes
        * from the host into the freshly mounted devtmpfs now, before
-       * create_devices() lays down the standard char nodes. */
+       * create_devices() lays down the standard char nodes.
+       * hw_access already implies full GPU wiring - no need to check gpu_mode
+       * separately here. */
       mirror_gpu_nodes(dev_path);
     } else {
       ds_warn("Failed to mount devtmpfs, falling back to tmpfs");
@@ -505,6 +507,16 @@ int setup_dev(const char *rootfs, int hw_access) {
     if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
                 "size=8M,mode=755") < 0)
       return -1;
+
+    /* --gpu mode: scan the host /dev for known GPU "smoking guns" and mknod
+     * the found nodes into our isolated tmpfs.  This gives GPU acceleration
+     * without exposing the full host devtmpfs.  mirror_gpu_nodes() honours
+     * the is_dangerous_node() blocklist and only creates character devices
+     * that exist on the host, so it is safe to call unconditionally here. */
+    if (gpu_mode) {
+      ds_log("[GPU] --gpu mode: mirroring host GPU nodes into isolated tmpfs");
+      mirror_gpu_nodes(dev_path);
+    }
   }
 
   /* Create minimal set of device nodes (creates secure console/ptmx/etc.) */

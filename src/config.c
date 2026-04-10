@@ -204,6 +204,8 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
       cfg->android_storage = parse_bool(val);
     } else if (strcmp(key, "enable_hw_access") == 0) {
       cfg->hw_access = parse_bool(val);
+    } else if (strcmp(key, "enable_gpu_mode") == 0) {
+      cfg->gpu_mode = parse_bool(val);
     } else if (strcmp(key, "enable_termux_x11") == 0) {
       cfg->termux_x11 = parse_bool(val);
     } else if (strcmp(key, "selinux_permissive") == 0) {
@@ -523,6 +525,7 @@ int ds_config_save(const char *config_path, struct ds_config *cfg) {
     fprintf(f_out, "enable_termux_x11=%d\n", cfg->termux_x11);
   }
   fprintf(f_out, "enable_hw_access=%d\n", cfg->hw_access);
+  fprintf(f_out, "enable_gpu_mode=%d\n", cfg->gpu_mode);
   fprintf(f_out, "selinux_permissive=%d\n", cfg->selinux_permissive);
   fprintf(f_out, "volatile_mode=%d\n", cfg->volatile_mode);
   fprintf(f_out, "force_cgroupv1=%d\n", cfg->force_cgroupv1);

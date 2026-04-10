@@ -242,7 +242,7 @@ int internal_boot(struct ds_config *cfg) {
   }
 
   /* 8. Setup /dev (device nodes, devtmpfs) */
-  if (setup_dev(".", cfg->hw_access) < 0) {
+  if (setup_dev(".", cfg->hw_access, cfg->gpu_mode) < 0) {
     ds_error("Failed to setup /dev.");
     return -1;
   }
@@ -251,6 +251,8 @@ int internal_boot(struct ds_config *cfg) {
   if (!cfg->reboot_cycle) {
     if (cfg->hw_access)
       ds_log("Setting up hardware access...");
+    else if (cfg->gpu_mode)
+      ds_log("GPU mode enabled: mirroring GPU nodes into isolated tmpfs...");
     else
       ds_log("Hardware access disabled: using isolated tmpfs...");
   }

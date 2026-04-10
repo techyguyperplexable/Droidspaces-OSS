@@ -437,6 +437,12 @@ static void print_page(int page, const char *bin) {
     printf("  export DISPLAY=:0\n");
     printf("  glxgears  # Hardware-accelerated rendering\n");
     printf("  (GPU groups and X11 socket are auto-configured)\n\n");
+
+    printf("%sGPU-only mode (no full hardware passthrough):%s\n", bold, reset);
+    printf("  %s --name=gpu --rootfs=/path/to/rootfs --gpu start\n", bin);
+    printf("  (Scans host /dev for GPU nodes and mknods them into an\n");
+    printf("   isolated tmpfs /dev. Safe alternative to --hw-access when\n");
+    printf("   only GPU acceleration is needed.)\n\n");
     break;
 
   case 4: /* Notes */
@@ -460,7 +466,11 @@ static void print_page(int page, const char *bin) {
     printf("11. With --hw-access, GPU device groups are auto-created in the\n");
     printf("    container's /etc/group and root is added to each group.\n");
     printf("    X11 socket is auto-mounted (Termux X11 on Android,\n");
-    printf("    /tmp/.X11-unix on desktop Linux).\n\n");
+    printf("    /tmp/.X11-unix on desktop Linux).\n");
+    printf("12. --gpu enables GPU acceleration without full hardware passthrough.\n");
+    printf("    Known GPU nodes are scanned from the host /dev and mknoded into\n");
+    printf("    the container's isolated tmpfs. The droidspaces-gpu group is\n");
+    printf("    auto-created. Safe to combine with --hw-access (no-op overlap).\n\n");
     break;
   }
 #undef printf

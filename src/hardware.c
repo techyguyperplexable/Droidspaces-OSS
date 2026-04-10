@@ -952,8 +952,12 @@ int setup_x11_and_virgl_sockets(struct ds_config *cfg) {
  *
  */
 int setup_hardware_access(struct ds_config *cfg) {
-  /* 1. Create GPU groups inside the container */
-  if (cfg->hw_access)
+  /* 1. Create GPU groups inside the container.
+   *    hw_access: full hardware passthrough - always set up GPU groups.
+   *    gpu_mode:  isolated tmpfs with GPU nodes mirrored in - also needs the
+   *               unified droidspaces-gpu group so the container user can
+   *               actually open those nodes. */
+  if (cfg->hw_access || cfg->gpu_mode)
     setup_gpu_groups();
 
   /* 2. Mount X11 socket for GUI applications (always attempt on Linux, check

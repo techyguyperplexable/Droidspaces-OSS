@@ -270,6 +270,7 @@ struct ds_config {
   /* Flags */
   int foreground;         /* --foreground */
   int hw_access;          /* --hw-access */
+  int gpu_mode;           /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
   int termux_x11;         /* --termux-x11 (Android only) */
   int volatile_mode;      /* --volatile */
   int disable_ipv6;       /* --disable-ipv6 */
@@ -421,7 +422,7 @@ int domount_silent(const char *src, const char *tgt, const char *fstype,
                    unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
 int ds_apply_jail_mask(int hw_access);
-int setup_dev(const char *rootfs, int hw_access);
+int setup_dev(const char *rootfs, int hw_access, int gpu_mode);
 int create_devices(const char *rootfs, int hw_access);
 int setup_devpts(int hw_access);
 int setup_volatile_overlay(struct ds_config *cfg);

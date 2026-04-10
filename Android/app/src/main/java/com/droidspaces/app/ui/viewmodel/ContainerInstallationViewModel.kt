@@ -35,6 +35,9 @@ class ContainerInstallationViewModel : ViewModel() {
     var enableHwAccess: Boolean by mutableStateOf(false)
         private set
 
+    var enableGpuMode: Boolean by mutableStateOf(false)
+        private set
+
     var enableTermuxX11: Boolean by mutableStateOf(false)
         private set
 
@@ -93,6 +96,7 @@ class ContainerInstallationViewModel : ViewModel() {
         disableIPv6: Boolean,
         enableAndroidStorage: Boolean,
         enableHwAccess: Boolean,
+        enableGpuMode: Boolean,
         enableTermuxX11: Boolean,
         selinuxPermissive: Boolean,
         volatileMode: Boolean,
@@ -109,6 +113,7 @@ class ContainerInstallationViewModel : ViewModel() {
         this.disableIPv6 = disableIPv6
         this.enableAndroidStorage = enableAndroidStorage
         this.enableHwAccess = enableHwAccess
+        this.enableGpuMode = enableGpuMode
         this.enableTermuxX11 = enableTermuxX11
         this.selinuxPermissive = selinuxPermissive
         this.volatileMode = volatileMode
@@ -138,6 +143,7 @@ class ContainerInstallationViewModel : ViewModel() {
             disableIPv6 = disableIPv6,
             enableAndroidStorage = enableAndroidStorage,
             enableHwAccess = enableHwAccess,
+            enableGpuMode = enableGpuMode,
             enableTermuxX11 = enableTermuxX11,
             selinuxPermissive = selinuxPermissive,
             volatileMode = volatileMode,
@@ -163,6 +169,7 @@ class ContainerInstallationViewModel : ViewModel() {
         disableIPv6 = false
         enableAndroidStorage = false
         enableHwAccess = false
+        enableGpuMode = false
         enableTermuxX11 = false
         selinuxPermissive = false
         volatileMode = false

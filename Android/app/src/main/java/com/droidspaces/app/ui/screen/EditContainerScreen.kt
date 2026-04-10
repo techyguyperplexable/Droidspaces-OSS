@@ -74,6 +74,7 @@ fun EditContainerScreen(
     var disableIPv6 by remember { mutableStateOf(container.disableIPv6) }
     var enableAndroidStorage by remember { mutableStateOf(container.enableAndroidStorage) }
     var enableHwAccess by remember { mutableStateOf(container.enableHwAccess) }
+    var enableGpuMode by remember { mutableStateOf(container.enableGpuMode) }
     var enableTermuxX11 by remember { mutableStateOf(container.enableTermuxX11) }
     var selinuxPermissive by remember { mutableStateOf(container.selinuxPermissive) }
     var volatileMode by remember { mutableStateOf(container.volatileMode) }
@@ -93,6 +94,7 @@ fun EditContainerScreen(
     var savedDisableIPv6 by remember { mutableStateOf(container.disableIPv6) }
     var savedEnableAndroidStorage by remember { mutableStateOf(container.enableAndroidStorage) }
     var savedEnableHwAccess by remember { mutableStateOf(container.enableHwAccess) }
+    var savedEnableGpuMode by remember { mutableStateOf(container.enableGpuMode) }
     var savedEnableTermuxX11 by remember { mutableStateOf(container.enableTermuxX11) }
     var savedSelinuxPermissive by remember { mutableStateOf(container.selinuxPermissive) }
     var savedVolatileMode by remember { mutableStateOf(container.volatileMode) }
@@ -129,6 +131,7 @@ fun EditContainerScreen(
             disableIPv6 != savedDisableIPv6 ||
             enableAndroidStorage != savedEnableAndroidStorage ||
             enableHwAccess != savedEnableHwAccess ||
+            enableGpuMode != savedEnableGpuMode ||
             enableTermuxX11 != savedEnableTermuxX11 ||
             selinuxPermissive != savedSelinuxPermissive ||
             volatileMode != savedVolatileMode ||
@@ -165,6 +168,7 @@ fun EditContainerScreen(
                     disableIPv6 = disableIPv6,
                     enableAndroidStorage = enableAndroidStorage,
                     enableHwAccess = enableHwAccess,
+                    enableGpuMode = enableGpuMode,
                     enableTermuxX11 = enableTermuxX11,
                     selinuxPermissive = selinuxPermissive,
                     volatileMode = volatileMode,
@@ -192,6 +196,7 @@ fun EditContainerScreen(
                         savedDisableIPv6 = disableIPv6
                         savedEnableAndroidStorage = enableAndroidStorage
                         savedEnableHwAccess = enableHwAccess
+                        savedEnableGpuMode = enableGpuMode
                         savedEnableTermuxX11 = enableTermuxX11
                         savedSelinuxPermissive = selinuxPermissive
                         savedVolatileMode = volatileMode
@@ -1086,6 +1091,20 @@ fun EditContainerScreen(
                     clearFocus()
                     enableHwAccess = it
                 }
+            )
+
+            ToggleCard(
+                icon = Icons.Default.Memory,
+                title = context.getString(R.string.gpu_access),
+                description = context.getString(R.string.gpu_access_description),
+                checked = if (enableHwAccess) true else enableGpuMode,
+                onCheckedChange = {
+                    if (!enableHwAccess) {
+                        clearFocus()
+                        enableGpuMode = it
+                    }
+                },
+                enabled = !enableHwAccess
             )
 
             ToggleCard(

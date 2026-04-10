@@ -346,6 +346,7 @@ int main(int argc, char **argv) {
       {"force-cgroupv1", no_argument, 0, 260},
       {"block-nested-namespaces", no_argument, 0, 261},
       {"nat-ip", required_argument, 0, 262},
+      {"gpu", no_argument, 0, 263},
       {"reset", no_argument, 0, 256},
       {"help", no_argument, 0, 'v'},
       {0, 0, 0, 0}};
@@ -866,6 +867,14 @@ int main(int argc, char **argv) {
       safe_strncpy(cfg.static_nat_ip, optarg, sizeof(cfg.static_nat_ip));
       break;
     }
+
+    case 263:
+      /* --gpu: enable GPU acceleration in isolated tmpfs mode.
+       * Scans the host /dev for known GPU nodes and mknods them into the
+       * container's isolated /dev.  Safe to combine with --hw-access (which
+       * already does full GPU wiring). */
+      cfg.gpu_mode = 1;
+      break;
 
     case '?':
       break;
