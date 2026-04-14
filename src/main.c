@@ -999,8 +999,9 @@ int main(int argc, char **argv) {
               "is now a NO-OP.");
     }
 
-    print_cgroup_status(&cfg);
     check_kernel_recommendation();
+    ds_cgroup_host_bootstrap(cfg.force_cgroupv1);
+    print_cgroup_status(&cfg);
     if (cfg.container_name[0] == '\0' && cfg.rootfs_path[0]) {
       generate_container_name(cfg.rootfs_path, cfg.container_name,
                               sizeof(cfg.container_name));
@@ -1029,6 +1030,8 @@ int main(int argc, char **argv) {
               "is now a NO-OP.");
     }
 
+    check_kernel_recommendation();
+    ds_cgroup_host_bootstrap(cfg.force_cgroupv1);
     print_cgroup_status(&cfg);
     ret = restart_rootfs(&cfg);
     goto cleanup;

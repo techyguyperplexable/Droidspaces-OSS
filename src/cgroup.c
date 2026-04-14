@@ -205,7 +205,31 @@ int ds_cgroup_host_is_v2(void) {
   return (unsigned long)sfs.f_type == (unsigned long)CGROUP2_SUPER_MAGIC;
 }
 
+void ds_cgroup_host_bootstrap(int force_cgroupv1) {
+  /* ANDROID RECOVERY FIX: If cgroup2 is supported but NOT mounted anywhere
+   * on the host, we mount it ourselves on /sys/fs/cgroup. This prevents
+   * falling back to V1 on modern kernels just because the recovery init
+   * script didn't mount it. */
+  if (!force_cgroupv1 && !ds_cgroup_host_is_v2() &&
+      grep_file("/proc/filesystems", "cgroup2") > 0) {
+    if (mkdir_p("/sys/fs/cgroup", 0755) == 0) {
+      /* Try to mount a tmpfs base first (LXC-style) */
+      mount("none", "/sys/fs/cgroup", "tmpfs", MS_NOSUID | MS_NODEV | MS_NOEXEC,
+            "mode=755,size=16M");
+      if (mount("none", "/sys/fs/cgroup", "cgroup2",
+                MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) == 0) {
+        ds_log("Auto-mounted Cgroup V2 on host.");
+      }
+    }
+  }
+}
+
 int setup_cgroups(int is_systemd, int force_cgroupv1) {
+  /* Ensure host has cgroups mounted before we try to setup container subset.
+   * Inside the container namespace, this is mostly a no-op if host is already
+   * setup, but ensures private view is consistent. */
+  ds_cgroup_host_bootstrap(force_cgroupv1);
+
   if (access("sys/fs/cgroup", F_OK) != 0) {
     if (mkdir_p("sys/fs/cgroup", 0755) < 0)
       return -1;

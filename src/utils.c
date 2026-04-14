@@ -969,7 +969,6 @@ void check_kernel_recommendation(void) {
             "some functions might be unstable.",
             major, minor, DS_RECOMMENDED_KERNEL_MAJOR,
             DS_RECOMMENDED_KERNEL_MINOR);
-    printf("\r\n");
     fflush(stdout);
   }
 }
