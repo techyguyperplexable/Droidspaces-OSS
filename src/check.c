@@ -75,12 +75,11 @@ int check_ns(int flag, const char *name) {
 }
 
 static int check_pivot_root(void) {
-  /* Probe the syscall directly instead of guessing from fstype.
-   * pivot_root(".", ".") returns EINVAL (bad args) when the syscall is
-   * present but args are wrong, or ENOSYS when not compiled in.
-   * This works correctly even on ramfs/rootfs roots (e.g. recovery env). */
-  int ret = syscall(__NR_pivot_root, ".", ".");
-  if (ret < 0 && errno == ENOSYS)
+  /* Probe for pivot_root syscall presence without actually executing it
+   * with dangerous arguments. We check if the syscall is implemented
+   * by passing invalid pointers (-1) or NULLs; if it returns ENOSYS,
+   * it's missing. If it returns EFAULT or EINVAL, it exists. */
+  if (syscall(__NR_pivot_root, NULL, NULL) < 0 && errno == ENOSYS)
     return 0;
   return 1;
 }
