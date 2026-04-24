@@ -378,7 +378,7 @@ static void *dhcp_server_loop(void *arg) {
   fds[1].events = POLLIN;
 
   while (!ctx->stop) {
-    /* ── Multiplex ────────────────────────────────────────────────────── */
+    /* Multiplex */
     int poll_ret = poll(fds, 2, -1);
     if (poll_ret < 0) {
       if (errno == EINTR || errno == EAGAIN)
@@ -395,7 +395,7 @@ static void *dhcp_server_loop(void *arg) {
     if (!(fds[0].revents & POLLIN))
       continue;
 
-    /* ── Receive ──────────────────────────────────────────────────────── */
+    /* Receive */
     ssize_t len = recv(packet_sock, rx_buf, sizeof(rx_buf), 0);
     if (len < 0) {
       if (errno == EINTR || errno == EAGAIN)
@@ -461,7 +461,7 @@ static void *dhcp_server_loop(void *arg) {
     if (opt_get(req.options, opts_len, OPT_MSG_TYPE, &type_byte, 1) < 0)
       continue;
 
-    /* ── Dispatch ─────────────────────────────────────────────────────── */
+    /* Dispatch */
     switch (type_byte) {
 
     case DHCPDISCOVER:
@@ -530,7 +530,7 @@ void ds_dhcp_server_start(struct ds_config *cfg, const char *veth_host,
   g_dhcp.gw_ip_be = gw_ip_be;
   memcpy(g_dhcp.peer_mac, peer_mac, 6);
 
-  /* ── Fetch Bridge MAC ─────────────────────────────────────────────── */
+  /* Fetch Bridge MAC */
   /* We need the bridge MAC to spoof the source in DHCP replies.
    * If we use 00:00:00... or a random MAC, the container's ARP will break. */
   int s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -589,16 +589,16 @@ void ds_dhcp_server_start(struct ds_config *cfg, const char *veth_host,
     }
   }
 
-  /* ── No sockets created here ────────────────────────────────────────── */
+  /* No sockets created here */
   /* We build and bind all sockets inside dhcp_server_loop. This is cleaner
    * and avoids having two threads access ctx->sock during teardown/start. */
   g_dhcp.sock = -1;
 
-  /* ── Init startup synchronization ───────────────────────────────────── */
+  /* Init startup synchronization */
   g_dhcp.ready = 0;
   pthread_cond_init(&g_dhcp.ready_cond, NULL);
 
-  /* ── Spawn joinable thread ─────────────────────────────────────────── */
+  /* Spawn joinable thread */
   /* Joinable (default) so ds_dhcp_server_stop() can pthread_join() and
    * guarantee the thread has fully exited before the next start() call
    * calls memset(&g_dhcp, 0).  A detached thread could still be running

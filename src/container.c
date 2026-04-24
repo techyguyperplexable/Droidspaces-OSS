@@ -565,7 +565,7 @@ int start_rootfs(struct ds_config *cfg) {
       _exit(EXIT_FAILURE);
     }
 
-    /* ── Monitor Hardening ──
+    /* Monitor Hardening
      * Ignore common termination signals to prevent Android's process manager
      * from ending the supervisor prematurely. Monitor must only die via
      * SIGKILL or successful container exit. */
@@ -629,7 +629,7 @@ int start_rootfs(struct ds_config *cfg) {
 
     int stdio_redirected = 0;
 
-    /* ── Reboot-aware boot loop ──
+    /* Reboot-aware boot loop
      * Each iteration forks an intermediate child that creates a fresh PID
      * namespace (unshare(CLONE_NEWPID)) and then forks the container init.
      *
@@ -654,7 +654,7 @@ int start_rootfs(struct ds_config *cfg) {
       cfg->net_done_pipe[0] = cfg->net_done_pipe[1] = -1;
     }
 
-    /* ── Networking pipes (created fresh for every boot cycle) ── */
+    /* Networking pipes (created fresh for every boot cycle) */
     int mid_sync_pipe[2] = {-1, -1};
     if (cfg->net_mode != DS_NET_HOST) {
       if (pipe(cfg->net_ready_pipe) < 0 || pipe(cfg->net_done_pipe) < 0 ||
@@ -717,7 +717,7 @@ int start_rootfs(struct ds_config *cfg) {
       _exit(EXIT_FAILURE);
 
     if (mid_pid == 0) {
-      /* ── INTERMEDIATE PROCESS ──
+      /* INTERMEDIATE PROCESS
        * Create a fresh PID namespace (and NET namespace for NAT/none modes)
        * for this boot cycle. */
       int clone_flags = CLONE_NEWPID;
@@ -816,7 +816,7 @@ int start_rootfs(struct ds_config *cfg) {
       _exit(WIFEXITED(init_status) ? WEXITSTATUS(init_status) : EXIT_FAILURE);
     }
 
-    /* ── MONITOR continues here ── */
+    /* MONITOR continues here */
 
     /* Close sync pipe write end (intermediate handles it) */
     if (sync_pipe[1] >= 0) {
@@ -824,7 +824,7 @@ int start_rootfs(struct ds_config *cfg) {
       sync_pipe[1] = -1;
     }
 
-    /* ── Monitor: NAT networking handshake ─────────────────────────────
+    /* Monitor: NAT networking handshake
      *
      * Sequence (all non-blocking after pipes are ready):
      *   1. Read init_pid from mid_sync_pipe[0]
@@ -893,7 +893,6 @@ int start_rootfs(struct ds_config *cfg) {
         close(cfg->net_done_pipe[1]);
       }
     }
-    /* ─────────────────────────────────────────────────────────────────── */
 
     /* Ensure monitor is not sitting inside any mount point */
     if (chdir("/") < 0) {
@@ -944,7 +943,7 @@ int start_rootfs(struct ds_config *cfg) {
                               WTERMSIG(status), strsignal(WTERMSIG(status)));
     }
 
-    /* ── Reboot detection (internal reboot) ── */
+    /* Reboot detection (internal reboot) */
     if (WIFEXITED(status) && WEXITSTATUS(status) == DS_REBOOT_EXIT) {
       /* Check for external lock - if exists, abort reboot and let CLI handle it
        */

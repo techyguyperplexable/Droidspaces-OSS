@@ -4,14 +4,14 @@
  * Surgical iptables rule management via raw IP_TABLES socket API.
  * Replaces all `iptables` shell invocations.
  *
- * ── Android Safety Contract (NEVER violate these) ──────────────────────────
+ * Android Safety Contract (NEVER violate these)
  *   • Never flush any chain (would kill Android tethering/hotspot)
  *   • Never change any chain policy
  *   • Never touch rules we did not create
  *   • Only INSERT rules scoped to DS_NAT_BRIDGE / DS_DEFAULT_SUBNET
  *   • Always check existence before inserting (fully idempotent)
  *
- * ── Kernel / API compatibility ──────────────────────────────────────────────
+ * Kernel / API compatibility
  *   • Kernel 3.10+ (Android/Linux)
  *   • Uses getsockopt/setsockopt on AF_INET SOCK_RAW with IPPROTO_RAW
  *   • Falls back to iptables(8) binary on ENOPROTOOPT / EOPNOTSUPP / any
@@ -745,7 +745,7 @@ int ds_ipt_ensure_forward_accept(const char *iface) {
   if (fd < 0)
     goto binary_fallback_fwd;
 
-  /* ── -i iface ── */
+  /* -i iface */
   {
     struct ipt_getinfo info;
     unsigned char *base = NULL;
@@ -1402,10 +1402,10 @@ int ds_ipt_remove_portforwards(struct ds_config *cfg) {
   if (!container_ip || container_ip[0] == '\0')
     return 0;
 
-  /* ── Pass 1: state file ────────────────────────────────────────────────── */
+  /* Pass 1: state file */
   int had_state = pf_state_remove(container_ip);
 
-  /* ── Pass 2: cfg->port_forwards safety net ─────────────────────────────── */
+  /* Pass 2: cfg->port_forwards safety net */
   /* Attempt both addrtype and basic DNAT variants for every rule currently in
    * the config. Whichever variant wasn't actually inserted will return a
    * non-zero exit code from iptables; run_command_quiet ignores it. */
@@ -1459,7 +1459,7 @@ int ds_ipt_remove_portforwards(struct ds_config *cfg) {
     run_command_quiet(del_fwd);
   }
 
-  /* ── Pass 3: iptables-save shell sweep (fallback) ─────────────────────────
+  /* Pass 3: iptables-save shell sweep (fallback)
    */
   /* Only runs when no state file existed - i.e., the container was started by
    * an older version of Droidspaces that did not write state files, or the

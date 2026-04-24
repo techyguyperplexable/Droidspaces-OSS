@@ -182,7 +182,7 @@ static int ds_nl_talk(ds_nl_ctx_t *ctx, struct nlmsghdr *req) {
 
 int ds_nl_probe_nat_capability(char *reason, size_t rsz) {
   int ret;
-  /* ── Step 1: CONFIG_NET_NS ── */
+  /* Step 1: CONFIG_NET_NS */
   if (access("/proc/self/ns/net", F_OK) != 0) {
     snprintf(reason, rsz,
              "CONFIG_NET_NS not compiled in. "
@@ -198,7 +198,7 @@ int ds_nl_probe_nat_capability(char *reason, size_t rsz) {
     return -1;
   }
 
-  /* ── Step 2: CONFIG_BRIDGE ── */
+  /* Step 2: CONFIG_BRIDGE */
   int has_bridge = 1;
   const char *probe_br = "ds-cap-br0";
   ret = ds_nl_create_bridge(ctx, probe_br);
@@ -215,12 +215,12 @@ int ds_nl_probe_nat_capability(char *reason, size_t rsz) {
     }
   }
 
-  /* ── Step 3: CONFIG_VETH ── */
+  /* Step 3: CONFIG_VETH */
   ret = ds_nl_create_veth(ctx, "ds-cap-h0", "ds-cap-p0");
   int has_veth = (ret == 0);
   int veth_err = ret;
 
-  /* ── Cleanup Probe Interfaces ── */
+  /* Cleanup Probe Interfaces */
   if (has_bridge)
     ds_nl_del_link(ctx, probe_br);
   if (has_veth)

@@ -166,7 +166,7 @@ int check_ns(int flag, const char *name);
  * Data structures
  * ---------------------------------------------------------------------------*/
 
-/* ── Networking modes ──────────────────────────────────────────────────────*/
+/* Networking modes */
 
 enum ds_net_mode {
   DS_NET_HOST = 0, /* share host network namespace (default) */
@@ -183,7 +183,7 @@ struct ds_net_handshake {
   char ip_str[32];    /* e.g. "172.28.4.47/16"  */
 };
 
-/* ── NAT networking constants ──────────────────────────────────────────────*/
+/* NAT networking constants */
 
 #ifndef DS_NAT_BRIDGE
 #define DS_NAT_BRIDGE "ds-br0"
@@ -310,7 +310,7 @@ struct ds_config {
   int is_img_mount;               /* 1 if rootfs was loop-mounted from .img */
   char img_mount_point[PATH_MAX]; /* where the .img was mounted */
 
-  /* ── NAT networking synchronization pipes ─────────────────────────────
+  /* NAT networking synchronization pipes
    * Both pairs are initialised to {-1,-1} in main() after memset.
    * Pipes are only created in container.c when net_mode != DS_NET_HOST. */
   int net_ready_pipe[2]; /* child → monitor: "I am in my new netns"  */

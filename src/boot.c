@@ -87,7 +87,7 @@ int internal_boot(struct ds_config *cfg) {
     return -1;
   }
 
-  /* ── NAT child-side handshake ────────────────────────────────────────────
+  /* NAT child-side handshake
    *
    * This block runs BEFORE any mount operations, while /proc still points to
    * the HOST /proc.  That means /proc/<our_pid>/ns/net is accessible to the
@@ -101,7 +101,7 @@ int internal_boot(struct ds_config *cfg) {
    *
    * For DS_NET_NONE: we still do the pipe exchange (monitor sends an empty
    * handshake) so loopback is still configured.  No veth is created.
-   * ─────────────────────────────────────────────────────────────────────── */
+   */
   if (cfg->net_mode != DS_NET_HOST) {
     ds_log("[NET] Child: net_mode=%d - starting handshake with monitor",
            cfg->net_mode);
