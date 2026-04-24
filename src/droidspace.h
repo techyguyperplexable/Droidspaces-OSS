@@ -1,5 +1,5 @@
 /*
- * Droidspaces v5 - High-performance Container Runtime
+ * Droidspaces v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -67,7 +67,7 @@
  * ---------------------------------------------------------------------------*/
 
 #define DS_PROJECT_NAME "Droidspaces"
-#define DS_VERSION "5.9.5"
+#define DS_VERSION "6.0.0"
 #define DS_MIN_KERNEL_MAJOR 3
 #define DS_MIN_KERNEL_MINOR 10
 #define DS_RECOMMENDED_KERNEL_MAJOR 4

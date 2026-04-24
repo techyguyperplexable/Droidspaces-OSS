@@ -1,5 +1,5 @@
 /*
- * Droidspaces v5 - Hardware Access Module
+ * Droidspaces v6 - Hardware Access Module
  *
  * This module manages GPU acceleration and hardware device nodes. To keep your
  * system stable, we exclusively use "render nodes" (/dev/dri/renderD*) for GPU

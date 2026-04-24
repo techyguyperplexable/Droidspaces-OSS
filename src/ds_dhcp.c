@@ -1,5 +1,5 @@
 /*
- * Droidspaces v5 - High-performance Container Runtime
+ * Droidspaces v6 - High-performance Container Runtime
  *
  * ds_dhcp.c - Embedded single-lease DHCP server for NAT containers.
  *
