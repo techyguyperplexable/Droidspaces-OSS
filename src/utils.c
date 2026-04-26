@@ -50,7 +50,6 @@ int validate_container_name(const char *name) {
   return 1;
 }
 
-<<<<<<< HEAD
 int validate_bind_destination(const char *dest) {
   if (!dest || dest[0] != '/' || dest[1] == '\0')
     return 0;
@@ -80,8 +79,6 @@ int validate_bind_destination(const char *dest) {
   return 1;
 }
 
-=======
->>>>>>> 12e8e1f (container: reject unsafe names)
 /* ---------------------------------------------------------------------------
  * Relative-path resolution
  *
