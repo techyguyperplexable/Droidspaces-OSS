@@ -19,6 +19,39 @@ static void set_container_defaults(const char *term) {
   setenv("container", "droidspaces", 1);
 }
 
+static int ds_store_env_var_owned(struct ds_config *cfg, char *key,
+                                  char *value) {
+  if (!cfg || !key || !value)
+    return -1;
+
+  for (int i = 0; i < cfg->env_var_count; i++) {
+    if (strcmp(cfg->env_vars[i].key, key) == 0) {
+      free(cfg->env_vars[i].value);
+      cfg->env_vars[i].value = value;
+      free(key);
+      return 0;
+    }
+  }
+
+  if (cfg->env_var_count >= cfg->env_var_capacity) {
+    int new_cap = cfg->env_var_capacity ? cfg->env_var_capacity * 2 : 16;
+    struct ds_env_var *new_vars =
+        realloc(cfg->env_vars, new_cap * sizeof(struct ds_env_var));
+    if (!new_vars) {
+      free(key);
+      free(value);
+      return -1;
+    }
+    cfg->env_vars = new_vars;
+    cfg->env_var_capacity = new_cap;
+  }
+
+  cfg->env_vars[cfg->env_var_count].key = key;
+  cfg->env_vars[cfg->env_var_count].value = value;
+  cfg->env_var_count++;
+  return 0;
+}
+
 void load_etc_environment(void) {
   FILE *envf = fopen("/etc/environment", "re");
   if (!envf)
@@ -80,6 +113,13 @@ void ds_env_boot_setup(struct ds_config *cfg) {
 
   /* Standard Linux LANG default */
   setenv("LANG", "en_US.UTF-8", 0);
+
+  if (cfg->audio_support && access(DS_AUDIO_PULSE_SOCKET, F_OK) == 0) {
+    setenv("PULSE_SERVER", "unix:" DS_AUDIO_PULSE_SOCKET, 0);
+    setenv("PULSE_RUNTIME_PATH", DS_AUDIO_PULSE_DIR, 0);
+    if (access(DS_AUDIO_PULSE_COOKIE, R_OK) == 0)
+      setenv("PULSE_COOKIE", DS_AUDIO_PULSE_COOKIE, 0);
+  }
 
   /* User-defined variables - applied LAST so they override our defaults above
    */
@@ -238,25 +278,11 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
       break;
     }
 
-    /* Store in config, growing if needed */
-    if (cfg->env_var_count >= cfg->env_var_capacity) {
-      int new_cap = cfg->env_var_capacity ? cfg->env_var_capacity * 2 : 16;
-      struct ds_env_var *new_vars =
-          realloc(cfg->env_vars, new_cap * sizeof(struct ds_env_var));
-      if (!new_vars) {
-        ds_error("Out of memory while parsing env file");
-        failed_count++;
-        free(key);
-        free(value);
-        break;
-      }
-      cfg->env_vars = new_vars;
-      cfg->env_var_capacity = new_cap;
+    if (ds_store_env_var_owned(cfg, key, value) < 0) {
+      ds_error("Out of memory while parsing env file");
+      failed_count++;
+      break;
     }
-
-    cfg->env_vars[cfg->env_var_count].key = key;
-    cfg->env_vars[cfg->env_var_count].value = value;
-    cfg->env_var_count++;
   }
 
   free(line);

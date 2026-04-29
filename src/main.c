@@ -70,6 +70,7 @@ void print_usage(void) {
       "                            Mount Android internal storage (/sdcard)\n"
       "  -H, --hw-access           Enable direct hardware access (/dev nodes)\n"
       "      --gpu                 Enable GPU acceleration nodes\n"
+      "  -A, --audio               Bridge host PulseAudio/pipewire-pulse\n"
       "  -X, --termux-x11          Configure Termux-X11 display support\n\n"
 
       C_BOLD "Options (Security & Boot):" C_RESET "\n"
@@ -341,6 +342,7 @@ int main(int argc, char **argv) {
       {"dns", required_argument, 0, 'd'},
       {"foreground", no_argument, 0, 'f'},
       {"hw-access", no_argument, 0, 'H'},
+      {"audio", no_argument, 0, 'A'},
       {"termux-x11", no_argument, 0, 'X'},
       {"disable-ipv6", no_argument, 0, 'I'},
       {"enable-android-storage", no_argument, 0, 'S'},
@@ -389,7 +391,7 @@ int main(int argc, char **argv) {
 
   /* 1. Discovery Pass: Capture identity and command without permuting argv.
    * Using '-' at the start of optstring returns non-options as '1'. */
-  while ((opt = getopt_long(argc, argv, "-r:i:n:h:d:fHXPvVB:C:E:", long_options,
+  while ((opt = getopt_long(argc, argv, "-r:i:n:h:d:fHAXPvVB:C:E:", long_options,
                             NULL)) != -1) {
     if (opt == 1) { /* Non-option argument */
       if (!discovered_cmd) {
@@ -546,7 +548,7 @@ int main(int argc, char **argv) {
    * Strict mode for 'run' prevents stealing arguments from the sub-command. */
   int strict = (discovered_cmd && (strcmp(discovered_cmd, "run") == 0));
   const char *optstring =
-      strict ? "+r:i:n:h:d:fHXPvVB:C:E:" : "r:i:n:h:d:fHXPvVB:C:E:";
+      strict ? "+r:i:n:h:d:fHAXPvVB:C:E:" : "r:i:n:h:d:fHAXPvVB:C:E:";
 
   while ((opt = getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
     switch (opt) {
@@ -577,6 +579,9 @@ int main(int argc, char **argv) {
       break;
     case 'H':
       cfg.hw_access = 1;
+      break;
+    case 'A':
+      cfg.audio_support = 1;
       break;
     case 'X':
       cfg.termux_x11 = 1;

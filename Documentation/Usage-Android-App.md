@@ -50,6 +50,14 @@ If you select **NAT (Isolated)** mode, you **must** specify one or more upstream
 ### Port Forwarding
 In NAT mode, use the **Port Forwarding** section to map host ports to container ports (e.g., `22:22`). You can also specify **port ranges** (e.g., `1000-2000:1000-2000`) for services that require multiple contiguous ports.
 
+## Audio Support
+
+The container configuration screen includes an **Audio Support** toggle. When enabled, Droidspaces tries to bridge a host PulseAudio-compatible socket into the container and automatically exposes `PULSE_SERVER` for apps launched inside the container.
+
+- **Android requirement:** Run a working PulseAudio server in Termux first.
+- **What gets bridged:** The host PulseAudio or `pipewire-pulse` socket, plus the PulseAudio cookie when Droidspaces can read it.
+- **What it does not do:** It does not start the host audio daemon for you.
+
 ---
 
 ## Panel Tab (Active Environments)

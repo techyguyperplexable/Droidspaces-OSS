@@ -48,6 +48,7 @@ fun ContainerConfigScreen(
     initialEnableHwAccess: Boolean = false,
     initialEnableGpuMode: Boolean = false,
     initialEnableTermuxX11: Boolean = false,
+    initialEnableAudio: Boolean = false,
     initialSelinuxPermissive: Boolean = false,
     initialVolatileMode: Boolean = false,
     initialBindMounts: List<BindMount> = emptyList(),
@@ -66,6 +67,7 @@ fun ContainerConfigScreen(
         enableHwAccess: Boolean,
         enableGpuMode: Boolean,
         enableTermuxX11: Boolean,
+        enableAudio: Boolean,
         selinuxPermissive: Boolean,
         volatileMode: Boolean,
         bindMounts: List<BindMount>,
@@ -86,6 +88,7 @@ fun ContainerConfigScreen(
     var enableHwAccess by remember { mutableStateOf(initialEnableHwAccess) }
     var enableGpuMode by remember { mutableStateOf(initialEnableGpuMode) }
     var enableTermuxX11 by remember { mutableStateOf(initialEnableTermuxX11) }
+    var enableAudio by remember { mutableStateOf(initialEnableAudio) }
     var selinuxPermissive by remember { mutableStateOf(initialSelinuxPermissive) }
     var volatileMode by remember { mutableStateOf(initialVolatileMode) }
     var bindMounts by remember { mutableStateOf(initialBindMounts) }
@@ -199,7 +202,7 @@ fun ContainerConfigScreen(
             ) {
                 Button(
                     onClick = {
-                        onNext(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, forceCgroupv1, blockNestedNs, privileged, if (envFileContent.isBlank()) null else envFileContent, upstreamInterfaces, portForwards)
+                        onNext(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, enableAudio, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, forceCgroupv1, blockNestedNs, privileged, if (envFileContent.isBlank()) null else envFileContent, upstreamInterfaces, portForwards)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -784,6 +787,14 @@ fun ContainerConfigScreen(
                 checked = enableTermuxX11,
                 onCheckedChange = { enableTermuxX11 = it },
                 enabled = true
+            )
+
+            ToggleCard(
+                icon = Icons.Default.VolumeUp,
+                title = context.getString(R.string.audio_support),
+                description = context.getString(R.string.audio_support_description),
+                checked = enableAudio,
+                onCheckedChange = { enableAudio = it }
             )
 
             Text(

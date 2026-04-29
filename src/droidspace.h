@@ -22,6 +22,7 @@
 #include <limits.h>
 #include <net/if.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <pty.h>
 #include <sched.h>
 #include <signal.h>
@@ -123,7 +124,12 @@
 #define DS_X11_PATH_DESKTOP "/.old_root/tmp/.X11-unix"
 #define DS_TERMUX_TMP_DIR "/data/data/com.termux/files/usr/tmp"
 #define DS_TERMUX_TMP_OLDROOT "/.old_root/data/data/com.termux/files/usr/tmp"
+#define DS_TERMUX_HOME_OLDROOT "/.old_root/data/data/com.termux/files/home"
 #define DS_X11_CONTAINER_DIR "/tmp/.X11-unix"
+#define DS_AUDIO_RUNTIME_DIR "/run/droidspaces/audio"
+#define DS_AUDIO_PULSE_DIR DS_AUDIO_RUNTIME_DIR "/pulse"
+#define DS_AUDIO_PULSE_SOCKET DS_AUDIO_PULSE_DIR "/native"
+#define DS_AUDIO_PULSE_COOKIE DS_AUDIO_PULSE_DIR "/cookie"
 
 /* File Extensions */
 #define DS_EXT_PID ".pid"
@@ -291,6 +297,7 @@ struct ds_config {
   int hw_access;          /* --hw-access */
   int gpu_mode;           /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
   int termux_x11;         /* --termux-x11 (Android only) */
+  int audio_support;      /* --audio: bridge host PulseAudio/pipewire-pulse */
   int volatile_mode;      /* --volatile */
   int disable_ipv6;       /* --disable-ipv6 */
   int android_storage;    /* --enable-android-storage */

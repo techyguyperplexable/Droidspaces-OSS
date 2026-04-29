@@ -1827,6 +1827,9 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
       printf("  HW access: GPU\n");
     else
       printf("  HW access: " C_DIM "none" C_RESET "\n");
+
+    if (cfg->audio_support)
+      printf("  Audio: Pulse bridge\n");
   } else {
     /* Best effort: read os-release from rootfs path */
     if (cfg->rootfs_path[0]) {

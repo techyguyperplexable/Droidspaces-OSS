@@ -181,6 +181,23 @@ For GUI application support, Droidspaces automatically bind-mounts the X11 socke
 
 After starting the container, set `DISPLAY=:0` inside the container to use the X11 display.
 
+### Audio Socket Bridging
+
+When `--audio` is enabled, Droidspaces looks for a host **PulseAudio-compatible** socket and bind-mounts it into the container at `/run/droidspaces/audio/pulse/native`. If a readable PulseAudio cookie is available, Droidspaces also mounts it and exports the matching `PULSE_COOKIE` path automatically.
+
+This works with:
+
+- **Desktop Linux:** Native PulseAudio or `pipewire-pulse`
+- **Android:** Termux-hosted PulseAudio setups
+
+Inside the container, Droidspaces sets these defaults when the bridge is active:
+
+- `PULSE_SERVER=unix:/run/droidspaces/audio/pulse/native`
+- `PULSE_RUNTIME_PATH=/run/droidspaces/audio/pulse`
+
+> [!NOTE]
+> Droidspaces does not start a host audio daemon for you. On Android, you still need a working PulseAudio server running in Termux. On Linux, the bridge expects an existing PulseAudio or `pipewire-pulse` socket in the launching user's session.
+
 ### Supported GPU Families
 
 | Family | Device Paths |

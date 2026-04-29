@@ -109,6 +109,7 @@ fun InstallationSummaryScreen(
                     if (config.enableHwAccess) SummaryItem(stringResource(R.string.hardware_access), stringResource(R.string.enabled_legend), Icons.Default.Devices)
                     if (!config.enableHwAccess && config.enableGpuMode) SummaryItem(stringResource(R.string.gpu_access), stringResource(R.string.enabled_legend), Icons.Default.Memory)
                     if (config.enableTermuxX11) SummaryItem(stringResource(R.string.termux_x11), stringResource(R.string.enabled_legend), painterResource(id = R.drawable.ic_x11))
+                    if (config.enableAudio) SummaryItem(stringResource(R.string.audio_support), stringResource(R.string.enabled_legend), Icons.Default.VolumeUp)
                     if (config.selinuxPermissive) SummaryItem(stringResource(R.string.selinux_permissive), stringResource(R.string.enabled_legend), Icons.Default.Security)
                     if (config.volatileMode) SummaryItem(stringResource(R.string.volatile_mode), stringResource(R.string.enabled_legend), Icons.Default.AutoDelete)
                     if (config.runAtBoot) SummaryItem(stringResource(R.string.run_at_boot), stringResource(R.string.enabled_legend), Icons.Default.PowerSettingsNew)
@@ -134,7 +135,7 @@ fun InstallationSummaryScreen(
                     }
 
                     if (!config.enableAndroidStorage &&
-                        !config.enableHwAccess && !config.enableGpuMode && !config.selinuxPermissive &&
+                        !config.enableHwAccess && !config.enableGpuMode && !config.enableAudio && !config.selinuxPermissive &&
                         !config.volatileMode && config.bindMounts.isEmpty() &&
                         !config.runAtBoot && !config.disableIPv6 &&
                         !config.forceCgroupv1 && !config.blockNestedNs &&
@@ -201,4 +202,3 @@ private fun SummaryItem(
         }
     }
 }
-

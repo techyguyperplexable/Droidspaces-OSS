@@ -941,6 +941,304 @@ int setup_x11_and_virgl_sockets(struct ds_config *cfg) {
   return 0;
 }
 
+static int path_is_socket(const char *path) {
+  struct stat st;
+
+  if (!path || stat(path, &st) < 0)
+    return 0;
+
+  return S_ISSOCK(st.st_mode);
+}
+
+static int path_is_readable_file(const char *path) {
+  struct stat st;
+
+  if (!path || stat(path, &st) < 0)
+    return 0;
+  if (S_ISDIR(st.st_mode))
+    return 0;
+
+  return access(path, R_OK) == 0;
+}
+
+static int prefix_old_root(const char *path, char *out, size_t size) {
+  if (!path || path[0] != '/')
+    return 0;
+
+  if (strncmp(path, "/.old_root/", 10) == 0 || strcmp(path, "/.old_root") == 0) {
+    safe_strncpy(out, path, size);
+    return 1;
+  }
+
+  if (snprintf(out, size, "/.old_root%s", path) >= (int)size)
+    return 0;
+
+  return 1;
+}
+
+static int pick_host_socket_candidate(const char *path, char *out,
+                                      size_t size) {
+  char candidate[PATH_MAX];
+
+  if (!prefix_old_root(path, candidate, sizeof(candidate)))
+    return 0;
+  if (!path_is_socket(candidate))
+    return 0;
+
+  safe_strncpy(out, candidate, size);
+  return 1;
+}
+
+static int pick_host_file_candidate(const char *path, char *out, size_t size) {
+  char candidate[PATH_MAX];
+
+  if (!prefix_old_root(path, candidate, sizeof(candidate)))
+    return 0;
+  if (!path_is_readable_file(candidate))
+    return 0;
+
+  safe_strncpy(out, candidate, size);
+  return 1;
+}
+
+static int find_pulse_socket_recursive(const char *base, int depth, char *out,
+                                       size_t size) {
+  DIR *dir;
+  struct dirent *entry;
+
+  if (!base || depth < 0)
+    return 0;
+
+  dir = opendir(base);
+  if (!dir)
+    return 0;
+
+  while ((entry = readdir(dir)) != NULL) {
+    char subdir[PATH_MAX];
+    struct stat st;
+
+    if (entry->d_name[0] == '.')
+      continue;
+    if (snprintf(subdir, sizeof(subdir), "%s/%s", base, entry->d_name) >=
+        (int)sizeof(subdir))
+      continue;
+    if (stat(subdir, &st) < 0 || !S_ISDIR(st.st_mode))
+      continue;
+
+    if (strcmp(entry->d_name, "pulse") == 0) {
+      char pulse_native[PATH_MAX];
+
+      if (snprintf(pulse_native, sizeof(pulse_native), "%s/native", subdir) <
+              (int)sizeof(pulse_native) &&
+          path_is_socket(pulse_native)) {
+        safe_strncpy(out, pulse_native, size);
+        closedir(dir);
+        return 1;
+      }
+    }
+
+    if (depth > 0 &&
+        find_pulse_socket_recursive(subdir, depth - 1, out, size)) {
+      closedir(dir);
+      return 1;
+    }
+  }
+
+  closedir(dir);
+  return 0;
+}
+
+static uid_t get_host_audio_uid(void) {
+  const char *sudo_uid = getenv("SUDO_UID");
+  char *end = NULL;
+  unsigned long parsed;
+
+  if (!sudo_uid || sudo_uid[0] == '\0')
+    return getuid();
+
+  errno = 0;
+  parsed = strtoul(sudo_uid, &end, 10);
+  if (errno != 0 || !end || *end != '\0' || parsed > UINT_MAX)
+    return getuid();
+
+  return (uid_t)parsed;
+}
+
+static int build_joined_candidate(char *out, size_t size, const char *base,
+                                  const char *suffix) {
+  if (!out || !base || !suffix || base[0] != '/')
+    return 0;
+
+  return snprintf(out, size, "%s/%s", base, suffix) < (int)size;
+}
+
+static int find_host_pulse_socket(char *out, size_t size) {
+  char candidate[PATH_MAX];
+  const char *pulse_server = getenv("PULSE_SERVER");
+  const char *runtime_path = getenv("PULSE_RUNTIME_PATH");
+  const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");
+  uid_t audio_uid = get_host_audio_uid();
+  static const char *android_candidates[] = {
+      "/data/data/com.termux/files/usr/var/run/pulse/native",
+      "/data/data/com.termux/files/usr/tmp/pulse/native",
+      NULL,
+  };
+
+  if (pulse_server && pulse_server[0]) {
+    const char *socket_path = pulse_server;
+
+    if (strncmp(socket_path, "unix:", 5) == 0)
+      socket_path += 5;
+    if (socket_path[0] == '/' &&
+        pick_host_socket_candidate(socket_path, out, size))
+      return 1;
+  }
+
+  if (runtime_path && build_joined_candidate(candidate, sizeof(candidate),
+                                             runtime_path, "native") &&
+      pick_host_socket_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  if (xdg_runtime && build_joined_candidate(candidate, sizeof(candidate),
+                                            xdg_runtime, "pulse/native") &&
+      pick_host_socket_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  if (snprintf(candidate, sizeof(candidate), "/run/user/%u/pulse/native",
+               (unsigned)audio_uid) < (int)sizeof(candidate) &&
+      pick_host_socket_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  for (int i = 0; android_candidates[i]; i++) {
+    if (pick_host_socket_candidate(android_candidates[i], out, size))
+      return 1;
+  }
+
+  if (find_pulse_socket_recursive(DS_TERMUX_TMP_OLDROOT, 3, out, size))
+    return 1;
+  if (find_pulse_socket_recursive(DS_TERMUX_HOME_OLDROOT "/.config/pulse", 2,
+                                  out, size)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+static int find_host_pulse_cookie(char *out, size_t size) {
+  char candidate[PATH_MAX];
+  const char *pulse_cookie = getenv("PULSE_COOKIE");
+  const char *runtime_path = getenv("PULSE_RUNTIME_PATH");
+  const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");
+  const char *xdg_config = getenv("XDG_CONFIG_HOME");
+  const char *home = getenv("HOME");
+  uid_t audio_uid = get_host_audio_uid();
+  struct passwd *pw = NULL;
+
+  if (pulse_cookie && pulse_cookie[0] == '/' &&
+      pick_host_file_candidate(pulse_cookie, out, size)) {
+    return 1;
+  }
+
+  if (runtime_path && build_joined_candidate(candidate, sizeof(candidate),
+                                             runtime_path, "cookie") &&
+      pick_host_file_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  if (xdg_runtime && build_joined_candidate(candidate, sizeof(candidate),
+                                            xdg_runtime, "pulse/cookie") &&
+      pick_host_file_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  if (xdg_config && build_joined_candidate(candidate, sizeof(candidate),
+                                           xdg_config, "pulse/cookie") &&
+      pick_host_file_candidate(candidate, out, size)) {
+    return 1;
+  }
+
+  if (home) {
+    if (build_joined_candidate(candidate, sizeof(candidate), home,
+                               ".config/pulse/cookie") &&
+        pick_host_file_candidate(candidate, out, size)) {
+      return 1;
+    }
+    if (build_joined_candidate(candidate, sizeof(candidate), home,
+                               ".pulse-cookie") &&
+        pick_host_file_candidate(candidate, out, size)) {
+      return 1;
+    }
+  }
+
+  if (audio_uid != getuid())
+    pw = getpwuid(audio_uid);
+  if (pw && pw->pw_dir[0]) {
+    if (build_joined_candidate(candidate, sizeof(candidate), pw->pw_dir,
+                               ".config/pulse/cookie") &&
+        pick_host_file_candidate(candidate, out, size)) {
+      return 1;
+    }
+    if (build_joined_candidate(candidate, sizeof(candidate), pw->pw_dir,
+                               ".pulse-cookie") &&
+        pick_host_file_candidate(candidate, out, size)) {
+      return 1;
+    }
+  }
+
+  if (pick_host_file_candidate(
+          "/data/data/com.termux/files/home/.config/pulse/cookie", out,
+          size)) {
+    return 1;
+  }
+  if (pick_host_file_candidate("/data/data/com.termux/files/home/.pulse-cookie",
+                               out, size)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+static int setup_audio_support(struct ds_config *cfg) {
+  char host_socket[PATH_MAX];
+  char host_cookie[PATH_MAX];
+
+  if (!cfg->audio_support)
+    return 0;
+
+  if (!find_host_pulse_socket(host_socket, sizeof(host_socket))) {
+    ds_warn("Audio support requested but no host PulseAudio/pipewire-pulse "
+            "socket was found");
+    return 0;
+  }
+
+  mkdir_p(DS_AUDIO_RUNTIME_DIR, 0700);
+  mkdir_p(DS_AUDIO_PULSE_DIR, 0700);
+
+  if (bind_mount(host_socket, DS_AUDIO_PULSE_SOCKET) < 0) {
+    ds_warn("Failed to bind-mount host audio socket: %s", strerror(errno));
+    return -1;
+  }
+
+  ds_log("Bridged host PulseAudio-compatible socket into container");
+
+  if (!find_host_pulse_cookie(host_cookie, sizeof(host_cookie))) {
+    ds_warn("No readable PulseAudio cookie found. Audio may still work if the "
+            "host allows anonymous or same-user access.");
+    return 0;
+  }
+
+  if (bind_mount(host_cookie, DS_AUDIO_PULSE_COOKIE) < 0) {
+    ds_warn("Failed to bind-mount PulseAudio cookie: %s", strerror(errno));
+    return -1;
+  }
+
+  ds_log("Bridged host PulseAudio cookie into container");
+  return 0;
+}
+
 /*
  * setup_hardware_access()
  *
@@ -960,7 +1258,10 @@ int setup_hardware_access(struct ds_config *cfg) {
   if (cfg->hw_access || cfg->gpu_mode)
     setup_gpu_groups();
 
-  /* 2. Mount X11 socket for GUI applications (always attempt on Linux, check
+  /* 2. Bridge host PulseAudio-compatible sockets if requested. */
+  setup_audio_support(cfg);
+
+  /* 3. Mount X11 socket for GUI applications (always attempt on Linux, check
    * flag on Android) */
   setup_x11_and_virgl_sockets(cfg);
 

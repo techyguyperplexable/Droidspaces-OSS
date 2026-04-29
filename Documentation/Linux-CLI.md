@@ -117,6 +117,7 @@ sudo droidspaces --name=web,db,app stop
 | `--volatile` | `-V` | Ephemeral mode. Changes are stored in RAM and lost on exit. |
 | `--hw-access` | `-H` | Expose host hardware (GPU, USB, etc.). Auto-detects GPU group IDs and creates matching groups inside the container. Mounts X11 socket for GUI apps (Termux X11 on Android, `/tmp/.X11-unix` on Linux). See [Safety Warning](Features.md#hardware-access-mode). |
 | `--gpu` | | Exclusively enable GPU acceleration. Scans the host `/dev` for known GPU nodes and securely maps only them into the container without exposing other host hardware. (Ignored if `-H` is passed). |
+| `--audio` | `-A` | Bridge the host PulseAudio or `pipewire-pulse` UNIX socket into the container and expose a default `PULSE_SERVER` automatically when the socket is detected. |
 | `--termux-x11`| `-X` | Mount X11 socket for Termux-X11 display (Android only). |
 | `--enable-android-storage`| | Mount `/storage/emulated/0` (Android only). |
 | `--selinux-permissive` | | Set host SELinux to permissive for the container session. |
@@ -181,6 +182,9 @@ enable_hw_access=0
 
 # Auto-detect and securely map GPU nodes without full hardware access
 enable_gpu_mode=0
+
+# Bridge host PulseAudio / pipewire-pulse into the container
+enable_audio=0
 
 # Android: Setup Termux X11 socket
 enable_termux_x11=0

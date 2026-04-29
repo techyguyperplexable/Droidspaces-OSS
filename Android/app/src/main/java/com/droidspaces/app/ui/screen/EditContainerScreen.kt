@@ -77,6 +77,7 @@ fun EditContainerScreen(
     var enableHwAccess by remember { mutableStateOf(container.enableHwAccess) }
     var enableGpuMode by remember { mutableStateOf(container.enableGpuMode) }
     var enableTermuxX11 by remember { mutableStateOf(container.enableTermuxX11) }
+    var enableAudio by remember { mutableStateOf(container.enableAudio) }
     var selinuxPermissive by remember { mutableStateOf(container.selinuxPermissive) }
     var volatileMode by remember { mutableStateOf(container.volatileMode) }
     var bindMounts by remember { mutableStateOf(container.bindMounts) }
@@ -98,6 +99,7 @@ fun EditContainerScreen(
     var savedEnableHwAccess by remember { mutableStateOf(container.enableHwAccess) }
     var savedEnableGpuMode by remember { mutableStateOf(container.enableGpuMode) }
     var savedEnableTermuxX11 by remember { mutableStateOf(container.enableTermuxX11) }
+    var savedEnableAudio by remember { mutableStateOf(container.enableAudio) }
     var savedSelinuxPermissive by remember { mutableStateOf(container.selinuxPermissive) }
     var savedVolatileMode by remember { mutableStateOf(container.volatileMode) }
     var savedBindMounts by remember { mutableStateOf(container.bindMounts) }
@@ -136,6 +138,7 @@ fun EditContainerScreen(
             enableHwAccess != savedEnableHwAccess ||
             enableGpuMode != savedEnableGpuMode ||
             enableTermuxX11 != savedEnableTermuxX11 ||
+            enableAudio != savedEnableAudio ||
             selinuxPermissive != savedSelinuxPermissive ||
             volatileMode != savedVolatileMode ||
             bindMounts != savedBindMounts ||
@@ -174,6 +177,7 @@ fun EditContainerScreen(
                     enableHwAccess = enableHwAccess,
                     enableGpuMode = enableGpuMode,
                     enableTermuxX11 = enableTermuxX11,
+                    enableAudio = enableAudio,
                     selinuxPermissive = selinuxPermissive,
                     volatileMode = volatileMode,
                     bindMounts = bindMounts,
@@ -203,6 +207,7 @@ fun EditContainerScreen(
                         savedEnableHwAccess = enableHwAccess
                         savedEnableGpuMode = enableGpuMode
                         savedEnableTermuxX11 = enableTermuxX11
+                        savedEnableAudio = enableAudio
                         savedSelinuxPermissive = selinuxPermissive
                         savedVolatileMode = volatileMode
                         savedBindMounts = bindMounts
@@ -1132,6 +1137,17 @@ fun EditContainerScreen(
                 checked = enableTermuxX11,
                 onCheckedChange = { enableTermuxX11 = it },
                 enabled = true
+            )
+
+            ToggleCard(
+                icon = Icons.Default.VolumeUp,
+                title = context.getString(R.string.audio_support),
+                description = context.getString(R.string.audio_support_description),
+                checked = enableAudio,
+                onCheckedChange = {
+                    clearFocus()
+                    enableAudio = it
+                }
             )
 
             Text(
