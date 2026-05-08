@@ -37,6 +37,7 @@ void print_usage(void) {
       "  show                      List all running containers\n"
       "  scan                      Scan for untracked containers\n"
       "  doctor                    Inspect workspace metadata\n"
+      "  caps                      Show capability hardening policy\n"
       "  check                     Check system requirements\n"
       "  docs                      Show interactive documentation\n"
       "  help                      Show this help message\n"
@@ -445,6 +446,7 @@ int main(int argc, char **argv) {
       (discovered_cmd && (strcmp(discovered_cmd, "docs") == 0 ||
                           strcmp(discovered_cmd, "help") == 0 ||
                           strcmp(discovered_cmd, "version") == 0 ||
+                          strcmp(discovered_cmd, "caps") == 0 ||
                           strcmp(discovered_cmd, "mode") == 0));
 
   if (!is_daemon_cmd && !is_stateless_cmd && getenv("DS_NO_PROXY") == NULL) {
@@ -963,6 +965,11 @@ int main(int argc, char **argv) {
   if (strcmp(cmd, "docs") == 0) {
     print_documentation(argv[0]);
     ret = 0;
+    goto cleanup;
+  }
+
+  if (strcmp(cmd, "caps") == 0) {
+    ret = ds_capabilities_show(cfg.hw_access, cfg.privileged_mask);
     goto cleanup;
   }
 

@@ -72,6 +72,7 @@ sudo droidspaces --name=web,db,app stop
 | `show` | List all currently running containers in a table. |
 | `scan` | Detect and register orphaned/untracked containers. |
 | `doctor` | Inspect saved configs, pidfiles, locks, and NAT state without changing them. |
+| `caps` | Show the capability bounding-set policy used by standard and hardware modes. |
 | `check` | Verify system and kernel requirements. |
 | `docs` | Open the interactive terminal-based documentation. |
 | `help` | Display the help message. |
@@ -264,6 +265,13 @@ For cases where you need unmasked access:
 sudo droidspaces --name=privileged-box --rootfs=/path/to/rootfs --privileged=full start
 # Or mix and match tags:
 sudo droidspaces --name=dev-box --rootfs=/path/to/rootfs --privileged=nocaps,noseccomp start
+```
+
+Check the capability policy before choosing a privileged tag:
+```bash
+droidspaces caps
+droidspaces --hw-access caps
+droidspaces --privileged=nocaps caps
 ```
 
 ---

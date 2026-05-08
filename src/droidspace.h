@@ -671,10 +671,16 @@ int scan_containers(void);
 void write_plain_env_file(const char *src, const char *dst);
 
 /* ---------------------------------------------------------------------------
- * boot.c
+ * capabilities.c
  * ---------------------------------------------------------------------------*/
 
 void ds_apply_capability_hardening(int hw_access, int privileged_mask);
+int ds_capabilities_show(int hw_access, int privileged_mask);
+
+/* ---------------------------------------------------------------------------
+ * boot.c
+ * ---------------------------------------------------------------------------*/
+
 int internal_boot(struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------
