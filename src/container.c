@@ -19,61 +19,124 @@
  * Precision: 2048 (pids_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
  * This prevents format-truncation warnings while ensuring paths never overflow.
  */
-static void get_lock_path(const char *name, char *buf, size_t size) {
+static int get_lock_path(const char *name, char *buf, size_t size) {
+  if (!name || !buf || size == 0 || !validate_container_name(name))
+    return -1;
+
   char safe_name[256];
   sanitize_container_name(name, safe_name, sizeof(safe_name));
-  snprintf(buf, size, "%.2048s/%.256s" DS_EXT_LOCK, get_pids_dir(), safe_name);
+  int r = snprintf(buf, size, "%.2048s/%.256s" DS_EXT_LOCK, get_pids_dir(),
+                   safe_name);
+  return (r > 0 && (size_t)r < size) ? 0 : -1;
+}
+
+static int get_lock_pid_path(const char *lock_path, char *buf, size_t size) {
+  int r = snprintf(buf, size, "%.3800s/pid", lock_path);
+  return (r > 0 && (size_t)r < size) ? 0 : -1;
+}
+
+static int read_external_lock_holder(const char *lock_path, pid_t *holder_out) {
+  char buf[32];
+  char pid_path[PATH_MAX];
+
+  if (holder_out)
+    *holder_out = 0;
+
+  if (get_lock_pid_path(lock_path, pid_path, sizeof(pid_path)) == 0 &&
+      read_file(pid_path, buf, sizeof(buf)) > 0) {
+    if (holder_out)
+      *holder_out = (pid_t)atoi(buf);
+    return 0;
+  }
+
+  /* Backward compatibility for file locks created by older builds. */
+  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
+    if (holder_out)
+      *holder_out = (pid_t)atoi(buf);
+    return 0;
+  }
+
+  return -1;
+}
+
+static void remove_external_lock_path(const char *lock_path) {
+  char pid_path[PATH_MAX];
+  if (get_lock_pid_path(lock_path, pid_path, sizeof(pid_path)) == 0)
+    unlink(pid_path);
+  if (rmdir(lock_path) < 0 && errno == ENOTDIR)
+    unlink(lock_path);
 }
 
 /* Create external command lock - ONLY called by CLI parent.
  * Returns: 0 on success, -1 if lock already held by a live process. */
 static int acquire_external_lock(const char *name) {
   char lock_path[PATH_MAX];
-  get_lock_path(name, lock_path, sizeof(lock_path));
+  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
+    return -1;
 
-  /* Check if lock already exists */
-  if (access(lock_path, F_OK) == 0) {
-    /* Lock exists - verify if holder is still alive */
-    char buf[32];
-    if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-      pid_t holder = (pid_t)atoi(buf);
-      if (holder > 0 && holder != getpid() && kill(holder, 0) == 0) {
-        /* Lock holder is alive and NOT us - cannot acquire */
-        ds_warn("Cannot acquire lock: held by process %d", holder);
+  mkdir_p(get_pids_dir(), 0755);
+
+  for (int attempt = 0; attempt < 2; attempt++) {
+    if (mkdir(lock_path, 0700) == 0) {
+      char pid_path[PATH_MAX];
+      if (get_lock_pid_path(lock_path, pid_path, sizeof(pid_path)) < 0) {
+        remove_external_lock_path(lock_path);
         return -1;
       }
-      /* Stale lock detected */
-      if (holder > 0 && holder != getpid()) {
-        ds_log("Removing stale lock (holder PID %d is dead)", holder);
+
+      int fd = open(pid_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+      if (fd < 0) {
+        remove_external_lock_path(lock_path);
+        return -1;
       }
+
+      char pid_str[32];
+      int n = snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
+      ssize_t written = (n > 0) ? write_all(fd, pid_str, (size_t)n) : -1;
+      int ok = (n > 0 && written == (ssize_t)n);
+      close(fd);
+      if (!ok) {
+        remove_external_lock_path(lock_path);
+        return -1;
+      }
+      return 0;
     }
-    /* Remove stale lock */
-    unlink(lock_path);
+
+    if (errno != EEXIST)
+      return -1;
+
+    pid_t holder = 0;
+    read_external_lock_holder(lock_path, &holder);
+    if (holder == getpid())
+      return 0;
+    if (holder > 0 && kill(holder, 0) == 0) {
+      ds_warn("Cannot acquire lock: held by process %d", holder);
+      return -1;
+    }
+
+    if (holder > 0)
+      ds_log("Removing stale lock (holder PID %d is dead)", holder);
+    remove_external_lock_path(lock_path);
   }
 
-  /* Write our PID to lock file */
-  char pid_str[32];
-  snprintf(pid_str, sizeof(pid_str), "%d", getpid());
-  return write_file_atomic(lock_path, pid_str);
+  return -1;
 }
 
 /* Release external command lock - ONLY called by CLI parent.
  * Verifies ownership before removing. */
 static void release_external_lock(const char *name) {
   char lock_path[PATH_MAX];
-  get_lock_path(name, lock_path, sizeof(lock_path));
+  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
+    return;
 
   /* Verify we own the lock before removing */
-  char buf[32];
-  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-    pid_t holder = (pid_t)atoi(buf);
-    if (holder == getpid()) {
-      unlink(lock_path);
-    } else if (holder > 0) {
-      /* This should never happen but log it for debugging */
+  pid_t holder = 0;
+  if (read_external_lock_holder(lock_path, &holder) == 0) {
+    if (holder == getpid())
+      remove_external_lock_path(lock_path);
+    else if (holder > 0)
       ds_warn("Attempted to release lock owned by PID %d (we are %d)", holder,
               getpid());
-    }
   }
 }
 
@@ -112,25 +175,24 @@ void write_plain_env_file(const char *src, const char *dst) {
  * Returns: 1 if lock exists and holder is alive, 0 otherwise. */
 int is_external_lock_active(const char *name) {
   char lock_path[PATH_MAX];
-  get_lock_path(name, lock_path, sizeof(lock_path));
+  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
+    return 0;
 
   if (access(lock_path, F_OK) != 0)
     return 0; /* No lock */
 
   /* Lock exists - verify holder is alive */
-  char buf[32];
-  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-    pid_t holder = (pid_t)atoi(buf);
-    if (holder > 0 && kill(holder, 0) == 0)
-      return 1; /* Valid lock */
+  pid_t holder = 0;
+  if (read_external_lock_holder(lock_path, &holder) == 0 && holder > 0 &&
+      kill(holder, 0) == 0)
+    return 1; /* Valid lock */
 
-    /* Stale lock detected */
-    write_monitor_debug_log(name, "Removing stale lock (holder PID %d is dead)",
-                            holder);
-  }
+  /* Stale lock detected */
+  write_monitor_debug_log(name, "Removing stale lock (holder PID %d is dead)",
+                          holder);
 
   /* Remove stale lock */
-  unlink(lock_path);
+  remove_external_lock_path(lock_path);
   return 0;
 }
 
@@ -266,38 +328,40 @@ int start_rootfs(struct ds_config *cfg) {
 
   int has_side_effects = 0;
   int lock_acquired = 0;
+  int reused_mount = 0;
+  int sync_pipe[2] = {-1, -1};
 
-  /* 0. Early restart detection: check for external lock from previous stop
-   *    command to detect a preserved mount for reuse. */
+  /* 0. Serialize starts by name before checking uniqueness.  If a restart kept
+   *    an image mount around, the pre-existing lock is the handoff marker. */
   if (cfg->container_name[0]) {
     char lock_path[PATH_MAX];
-    get_lock_path(cfg->container_name, lock_path, sizeof(lock_path));
+    int restart_handoff =
+        (get_lock_path(cfg->container_name, lock_path, sizeof(lock_path)) == 0 &&
+         access(lock_path, F_OK) == 0);
 
-    if (access(lock_path, F_OK) == 0) {
-      /* This looks like a restart handoff - take ownership of the lock */
-      if (acquire_external_lock(cfg->container_name) == 0) {
-        lock_acquired = 1;
+    if (acquire_external_lock(cfg->container_name) != 0) {
+      ds_error("Cannot start '%s': another command is managing this container",
+               cfg->container_name);
+      goto cleanup;
+    }
+    lock_acquired = 1;
 
-        /* Try to reuse existing mount */
-        if (cfg->pidfile[0] == '\0')
-          resolve_pidfile_from_name(cfg->container_name, cfg->pidfile,
-                                    sizeof(cfg->pidfile));
+    if (restart_handoff) {
+      /* Try to reuse existing mount */
+      if (cfg->pidfile[0] == '\0')
+        resolve_pidfile_from_name(cfg->container_name, cfg->pidfile,
+                                  sizeof(cfg->pidfile));
 
-        char existing_mount[PATH_MAX];
-        if (cfg->pidfile[0] &&
-            read_mount_path(cfg->pidfile, existing_mount,
-                            sizeof(existing_mount)) > 0 &&
-            is_mountpoint(existing_mount)) {
-          safe_strncpy(cfg->rootfs_path, existing_mount,
-                       sizeof(cfg->rootfs_path));
-          cfg->is_img_mount = 1;
-          safe_strncpy(cfg->img_mount_point, cfg->rootfs_path,
-                       sizeof(cfg->img_mount_point));
-        } else {
-          /* Mount not active - remove invalid lock */
-          release_external_lock(cfg->container_name);
-          lock_acquired = 0;
-        }
+      char existing_mount[PATH_MAX];
+      if (cfg->pidfile[0] &&
+          read_mount_path(cfg->pidfile, existing_mount,
+                          sizeof(existing_mount)) > 0 &&
+          is_mountpoint(existing_mount)) {
+        safe_strncpy(cfg->rootfs_path, existing_mount, sizeof(cfg->rootfs_path));
+        cfg->is_img_mount = 1;
+        safe_strncpy(cfg->img_mount_point, cfg->rootfs_path,
+                     sizeof(cfg->img_mount_point));
+        reused_mount = 1;
       }
     }
   }
@@ -308,13 +372,11 @@ int start_rootfs(struct ds_config *cfg) {
   /* 1b. Name Uniqueness Check
    * We no longer auto-generate or increment names. The name must be provided
    * by the user and it must be unique. */
-  if (!lock_acquired) {
-    pid_t existing_pid = 0;
-    if (is_container_running(cfg, &existing_pid)) {
-      ds_error("Container name '%s' is already in use by PID %d.",
-               cfg->container_name, existing_pid);
-      goto cleanup;
-    }
+  pid_t running_pid = 0;
+  if (is_container_running(cfg, &running_pid)) {
+    ds_error("Container name '%s' is already in use by PID %d.",
+             cfg->container_name, running_pid);
+    goto cleanup;
   }
 
   /* 2. Preparation */
@@ -377,7 +439,7 @@ int start_rootfs(struct ds_config *cfg) {
   has_side_effects = 1;
 
   /* 2. Mount rootfs image if provided (using the resolved name) */
-  if (cfg->rootfs_img_path[0] && !lock_acquired) {
+  if (cfg->rootfs_img_path[0] && !reused_mount) {
     if (mount_rootfs_img(cfg->rootfs_img_path, cfg->rootfs_path,
                          sizeof(cfg->rootfs_path), cfg->container_name) < 0) {
       goto cleanup;
@@ -545,7 +607,6 @@ int start_rootfs(struct ds_config *cfg) {
   }
 
   /* 6. Pipe for synchronization */
-  int sync_pipe[2];
   if (pipe(sync_pipe) < 0) {
     ds_error("pipe failed: %s", strerror(errno));
     goto cleanup;
