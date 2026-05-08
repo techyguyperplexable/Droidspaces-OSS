@@ -161,6 +161,11 @@ static int validate_configuration_cli(struct ds_config *cfg) {
   if (!cfg->container_name[0]) {
     ds_error("Container name is mandatory (--name).");
     errors++;
+  } else if (!validate_container_name(cfg->container_name)) {
+    ds_error("Invalid container name '%s'. Use only letters, numbers, "
+             "'.', '_', '-' and spaces.",
+             cfg->container_name);
+    errors++;
   }
 
   if (!cfg->rootfs_path[0] && !cfg->rootfs_img_path[0]) {

@@ -97,9 +97,8 @@ static void parse_bind_mounts(const char *value, struct ds_config *cfg) {
       const char *dest_raw = trim_whitespace(sep + 1);
 
       char *src_exp = ds_resolve_path_arg(src_raw);
-      char *dest_exp = ds_resolve_path_arg(dest_raw);
       const char *src = src_exp ? src_exp : src_raw;
-      const char *dest = dest_exp ? dest_exp : dest_raw;
+      const char *dest = dest_raw;
 
       /* Validate before storing - caller's responsibility, same as CLI path */
       if (!validate_bind_destination(dest)) {
@@ -108,7 +107,6 @@ static void parse_bind_mounts(const char *value, struct ds_config *cfg) {
         ds_config_add_bind(cfg, src, dest);
       }
       free(src_exp);
-      free(dest_exp);
     }
     token = strtok_r(NULL, ",", &saveptr);
   }
@@ -229,7 +227,11 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
     char *val = trim_whitespace(equals + 1);
 
     if (strcmp(key, "name") == 0) {
-      safe_strncpy(cfg->container_name, val, sizeof(cfg->container_name));
+      if (validate_container_name(val)) {
+        safe_strncpy(cfg->container_name, val, sizeof(cfg->container_name));
+      } else {
+        ds_warn("config: ignoring invalid container name '%s'", val);
+      }
     } else if (strcmp(key, "hostname") == 0) {
       safe_strncpy(cfg->hostname, val, sizeof(cfg->hostname));
     } else if (strcmp(key, "rootfs_path") == 0) {
@@ -704,6 +706,8 @@ int ds_config_validate(struct ds_config *cfg) {
     errors++;
   if (!cfg->container_name[0])
     errors++;
+  if (cfg->container_name[0] && !validate_container_name(cfg->container_name))
+    errors++;
   if (!cfg->rootfs_path[0] && !cfg->rootfs_img_path[0])
     errors++;
 
@@ -742,6 +746,8 @@ char *ds_config_auto_path(const char *rootfs_path) {
 int ds_config_load_by_name(const char *name, struct ds_config *cfg) {
   if (!name || name[0] == '\0')
     return -1;
+  if (!validate_container_name(name))
+    return -1;
 
   char safe_name[256];
   sanitize_container_name(name, safe_name, sizeof(safe_name));
@@ -755,6 +761,8 @@ int ds_config_load_by_name(const char *name, struct ds_config *cfg) {
 
 int ds_config_save_by_name(const char *name, struct ds_config *cfg) {
   if (!name || name[0] == '\0')
+    return -1;
+  if (!validate_container_name(name))
     return -1;
 
   char safe_name[256];
