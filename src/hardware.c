@@ -614,9 +614,10 @@ static void do_mirror_gpu_dir(const char *host_dir, const char *prefix,
 /*
  * mirror_gpu_nodes()
  *
- * Public entry point called from setup_dev() immediately after devtmpfs is
- * mounted.  Mirrors every GPU/hardware device node that scan_host_gpu_gids()
- * would detect, using the same scan paths so behaviour is always in sync.
+ * Public entry point called from setup_dev() after the container's private
+ * /dev tmpfs is mounted.  Mirrors every GPU/hardware device node that
+ * scan_host_gpu_gids() would detect, using the same scan paths so behaviour
+ * is always in sync.
  *
  * Must be called BEFORE pivot_root while the host /dev is still accessible.
  */

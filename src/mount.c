@@ -425,86 +425,6 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
   return 0;
 }
 
-/*
- * prune_host_devices()
- *
- * Scans the mounted /dev (devtmpfs) and unlinks dangerous nodes to isolate
- * the container from the host's display server, consoles, and GPU masters.
- */
-static void prune_host_devices(const char *dev_path, int privileged_mask) {
-  if (privileged_mask & DS_PRIV_UNFILTERED) {
-    ds_log("[SEC] --privileged=unfiltered-dev: skipping hardware blocklist.");
-    return;
-  }
-  DIR *dir = opendir(dev_path);
-  if (!dir)
-    return;
-
-  struct dirent *entry;
-  char path[PATH_MAX];
-
-  while ((entry = readdir(dir)) != NULL) {
-    const char *name = entry->d_name;
-    int should_unlink = 0;
-
-    if (is_dangerous_node(name)) {
-      should_unlink = 1;
-    }
-
-    if (should_unlink) {
-      snprintf(path, sizeof(path), "%.3800s/%s", dev_path, name);
-      /* Use force_unlink to handle potential bind-mount stale artifacts */
-      umount2(path, MNT_DETACH);
-      force_unlink(path);
-      continue;
-    }
-
-    /* Subdirectory scanning for Tiers 1 and 2 (caps) */
-    if (strcmp(name, "dri") == 0 || strcmp(name, "nvidia-caps") == 0) {
-      snprintf(path, sizeof(path), "%.3800s/%s", dev_path, name);
-      DIR *subdir = opendir(path);
-      if (subdir) {
-        struct dirent *subentry;
-        while ((subentry = readdir(subdir)) != NULL) {
-          int sub_unlink = 0;
-          const char *subname = subentry->d_name;
-
-          if (is_dangerous_node(subname)) {
-            sub_unlink = 1;
-          }
-
-          if (sub_unlink) {
-            char subpath[PATH_MAX];
-            snprintf(subpath, sizeof(subpath), "%.3800s/%s", path, subname);
-            unlink(subpath);
-          }
-        }
-        closedir(subdir);
-
-        /* Special case: Handle /dev/dri/by-path symlinks */
-        if (strcmp(name, "dri") == 0) {
-          char bp_path[PATH_MAX];
-          snprintf(bp_path, sizeof(bp_path), "%.3800s/by-path", path);
-          DIR *bp_dir = opendir(bp_path);
-          if (bp_dir) {
-            while ((subentry = readdir(bp_dir)) != NULL) {
-              if (strstr(subentry->d_name, "-card")) {
-                char bppath[PATH_MAX];
-                snprintf(bppath, sizeof(bppath), "%.3800s/%s", bp_path,
-                         subentry->d_name);
-                unlink(bppath);
-              }
-            }
-            closedir(bp_dir);
-          }
-        }
-      }
-    }
-  }
-
-  closedir(dir);
-}
-
 /* ---------------------------------------------------------------------------
  * /dev setup
  * ---------------------------------------------------------------------------*/
@@ -517,46 +437,18 @@ int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
   /* Ensure the directory exists */
   mkdir(dev_path, 0755);
 
-  if (hw_access) {
-    /* If hw_access is enabled, we mount host's devtmpfs.
-     * WARNING: This is a shared singleton. We MUST be careful. */
-    if (domount("devtmpfs", dev_path, "devtmpfs", MS_NOSUID | MS_NOEXEC,
-                "mode=755") == 0) {
-      /* Clean up conflicting nodes from the shared devtmpfs.
-       * We MUST immediately recreate them in create_devices() as REAL
-       * character devices to prevent host breakage. This also performs
-       * DRM master and host display isolation. */
-      prune_host_devices(dev_path, privileged_mask);
+  const char *dev_opts = (hw_access || gpu_mode) ? "size=32M,mode=755"
+                                                 : "size=8M,mode=755";
 
-      /* devtmpfs is the kernel's own instance and does NOT contain nodes
-       * that Android's ueventd created in its tmpfs-based /dev (kgsl-3d0,
-       * mali0, dri/renderD128, etc.).  Mirror any missing GPU/hardware nodes
-       * from the host into the freshly mounted devtmpfs now, before
-       * create_devices() lays down the standard char nodes.
-       * hw_access already implies full GPU wiring - no need to check gpu_mode
-       * separately here. */
-      mirror_gpu_nodes(dev_path);
-    } else {
-      ds_warn("Failed to mount devtmpfs, falling back to tmpfs");
-      if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
-                  "size=8M,mode=755") < 0)
-        return -1;
-    }
-  } else {
-    /* Secure isolated /dev using tmpfs */
-    if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
-                "size=8M,mode=755") < 0)
-      return -1;
+  /* Always use a private tmpfs for /dev.  --hw-access and --gpu then mirror
+   * selected host device nodes into that private mount, instead of mutating the
+   * kernel's shared devtmpfs instance. */
+  if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC, dev_opts) < 0)
+    return -1;
 
-    /* --gpu mode: scan the host /dev for known GPU "smoking guns" and mknod
-     * the found nodes into our isolated tmpfs.  This gives GPU acceleration
-     * without exposing the full host devtmpfs.  mirror_gpu_nodes() honours
-     * the is_dangerous_node() blocklist and only creates character devices
-     * that exist on the host, so it is safe to call unconditionally here. */
-    if (gpu_mode) {
-      ds_log("[GPU] --gpu mode: mirroring host GPU nodes into isolated tmpfs");
-      mirror_gpu_nodes(dev_path);
-    }
+  if (hw_access || gpu_mode) {
+    ds_log("[GPU] mirroring host GPU/hardware nodes into isolated tmpfs");
+    mirror_gpu_nodes(dev_path);
   }
 
   /* Create minimal set of device nodes (creates secure console/ptmx/etc.) */
