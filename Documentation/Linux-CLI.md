@@ -71,6 +71,7 @@ sudo droidspaces --name=web,db,app stop
 | `info` | Show deep technical details about a container. |
 | `show` | List all currently running containers in a table. |
 | `scan` | Detect and register orphaned/untracked containers. |
+| `doctor` | Inspect saved configs, pidfiles, locks, and NAT state without changing them. |
 | `check` | Verify system and kernel requirements. |
 | `docs` | Open the interactive terminal-based documentation. |
 | `help` | Display the help message. |
@@ -274,6 +275,11 @@ sudo droidspaces --name=dev-box --rootfs=/path/to/rootfs --privileged=nocaps,nos
 If a container was started outside the current session, or its host-side PID file / config file was lost or corrupted, use `scan` to resurrect it from the container's isolated `/run` memory:
 ```bash
 sudo droidspaces scan
+```
+
+Use `doctor` when you want a read-only report before changing anything:
+```bash
+sudo droidspaces doctor
 ```
 
 ---

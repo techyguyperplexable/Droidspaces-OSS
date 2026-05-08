@@ -36,6 +36,7 @@ void print_usage(void) {
       "  pid                       Show the live PID of the container init\n"
       "  show                      List all running containers\n"
       "  scan                      Scan for untracked containers\n"
+      "  doctor                    Inspect workspace metadata\n"
       "  check                     Check system requirements\n"
       "  docs                      Show interactive documentation\n"
       "  help                      Show this help message\n"
@@ -977,6 +978,12 @@ int main(int argc, char **argv) {
     ret = 1;
     goto cleanup;
   }
+
+  if (strcmp(cmd, "doctor") == 0) {
+    ret = ds_doctor_run();
+    goto cleanup;
+  }
+
   ensure_workspace();
 
   if (strcmp(cmd, "show") == 0) {

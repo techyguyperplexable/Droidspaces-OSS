@@ -42,6 +42,7 @@ SRCS = $(SRC_DIR)/main.c \
        $(SRC_DIR)/container.c \
        $(SRC_DIR)/environment.c \
        $(SRC_DIR)/documentation.c \
+       $(SRC_DIR)/doctor.c \
        $(SRC_DIR)/hardware.c \
        $(SRC_DIR)/ds_iptables.c \
        $(SRC_DIR)/ds_netlink.c \
