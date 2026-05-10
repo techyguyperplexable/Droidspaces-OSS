@@ -161,6 +161,23 @@ int ds_seccomp_apply_minimal(int hw_access, int privileged_mask) {
       /* Reload nr */
       filter[curr++] = (struct sock_filter)BPF_STMT(
           BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+
+      /*
+       * 11. Block umount/umount2.  Without this, a container with
+       * CAP_SYS_ADMIN can lift the /dev/null masks installed by
+       * ds_apply_jail_mask (e.g. /proc/sysrq-trigger, cgroup release_agent)
+       * and reach the host kernel underneath.
+       */
+#ifdef __NR_umount
+      filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
+                                                    __NR_umount, 0, 1);
+      filter[curr++] = (struct sock_filter)BPF_STMT(
+          BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+#endif
+      filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
+                                                    __NR_umount2, 0, 1);
+      filter[curr++] = (struct sock_filter)BPF_STMT(
+          BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
     }
   }
 
