@@ -1098,6 +1098,12 @@ int start_rootfs(struct ds_config *cfg) {
        * ds_dns_proxy_start() will restart it cleanly after veth setup. */
       ds_dns_proxy_stop();
 
+      /* Same situation for the DHCP server: ds_dhcp_server_start() memsets
+       * g_dhcp under g_dhcp_lock on the next cycle, racing the still-running
+       * dhcp_server_loop thread that reads from the same memory.  The DHCP
+       * thread is intentionally joinable so stop() can join before memset. */
+      ds_dhcp_server_stop();
+
       goto reboot_loop;
     }
 
