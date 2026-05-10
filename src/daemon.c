@@ -872,17 +872,15 @@ int ds_daemon_run(int foreground, char **argv) {
     }
 
     /*
-     * authenticate the peer.
-     * on android, only uid 0 can connect (libsu or magisk). selinux also
-     * enforces this, but let's be safe.
-     * on linux, we allow any uid. the daemon runs as root and acts as a proxy
-     * for local users.
+     * authenticate the peer: only uid 0 may issue commands.
+     * the daemon execs droidspaces with the caller's argv as root, so any
+     * weaker check is a local-uid -> host-root primitive.
      */
     {
       struct ucred cred;
       socklen_t clen = sizeof(cred);
       if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0 ||
-          (is_android() && cred.uid != 0)) {
+          cred.uid != 0) {
         close(conn);
         continue;
       }
