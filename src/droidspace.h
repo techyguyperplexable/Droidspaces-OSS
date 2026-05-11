@@ -299,6 +299,7 @@ struct ds_config {
   int force_cgroupv1;     /* --force-cgroupv1: use v1 even if v2 is available */
   int block_nested_ns;    /* --block-nested-namespaces: fix VFS deadlock by
                                blocking nested namespace creation */
+  int landlock;           /* --landlock: opt-in LSM filesystem sandbox */
   int privileged_mask;    /* --privileged bitmask */
   char prog_name[64];     /* argv[0] for logging */
 
@@ -718,6 +719,13 @@ int ds_doctor_run(void);
  * ---------------------------------------------------------------------------*/
 
 void print_documentation(const char *argv0);
+
+/* ---------------------------------------------------------------------------
+ * landlock.c
+ * ---------------------------------------------------------------------------*/
+
+int ds_landlock_supported(void);
+int ds_landlock_apply(const struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------
  * check.c

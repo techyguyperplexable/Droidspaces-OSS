@@ -429,6 +429,7 @@ int internal_boot(struct ds_config *cfg) {
   /* 23c. Apply security hardening (capabilities)
    * This is done at the very end to ensure all setup tasks that might need
    * privileges (like chown/chmod) are finished. */
+  ds_landlock_apply(cfg);
   ds_apply_capability_hardening(cfg->hw_access, cfg->privileged_mask);
 
   /* 24. Redirect standard I/O to /dev/console */

@@ -80,6 +80,8 @@ void print_usage(void) {
       "      --block-nested-namespaces\n"
       "                            Manual Deadlock Shield (no nested "
       "namespaces)\n"
+      "      --landlock            Enable Landlock LSM filesystem sandbox "
+      "(kernel 5.13+)\n"
       "      --privileged=TAGS     Relax security: nomask, nocaps, noseccomp, "
       "shared, unfiltered-dev, full\n\n"
 
@@ -356,6 +358,7 @@ int main(int argc, char **argv) {
       {"privileged", required_argument, 0, 264},
       {"nat-ip", required_argument, 0, 262},
       {"gpu", no_argument, 0, 263},
+      {"landlock", no_argument, 0, 265},
       {"reset", no_argument, 0, 256},
       {"help", no_argument, 0, 'v'},
       {0, 0, 0, 0}};
@@ -904,6 +907,12 @@ int main(int argc, char **argv) {
        * container's isolated /dev.  Safe to combine with --hw-access (which
        * already does full GPU wiring). */
       cfg.gpu_mode = 1;
+      break;
+
+    case 265:
+      /* --landlock: layer Landlock on top of the jail mask.  Warns and
+       * continues if the kernel is too old. */
+      cfg.landlock = 1;
       break;
 
     case '?':

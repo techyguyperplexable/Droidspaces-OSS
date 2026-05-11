@@ -369,6 +369,10 @@ int check_requirements_detailed(void) {
   print_ds_check("Cgroup namespace", "Control Group namespace isolation",
                  check_ns(CLONE_NEWCGROUP, "cgroup"), "OPT");
 
+  print_ds_check("Landlock LSM",
+                 "Required for --landlock filesystem sandbox (Linux 5.13+)",
+                 ds_landlock_supported() > 0, "OPT");
+
   int has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
   print_ds_check(
       "devtmpfs support",
