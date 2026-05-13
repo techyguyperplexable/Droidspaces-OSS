@@ -413,7 +413,9 @@ int internal_boot(struct ds_config *cfg) {
 
   /* 23. Clear environment and set container defaults */
   ds_env_boot_setup(cfg);
+  ds_audio_setup(cfg);
   ds_env_save("/run/droidspaces.env", cfg);
+  ds_audio_apply_env(cfg);
 
   /* 23b. Integration with /etc/profile.d for universal sourcing */
   if (access("/etc/profile.d", F_OK) == 0) {
@@ -430,6 +432,7 @@ int internal_boot(struct ds_config *cfg) {
    * This is done at the very end to ensure all setup tasks that might need
    * privileges (like chown/chmod) are finished. */
   ds_landlock_apply(cfg);
+  ds_audio_spawn_gateway(cfg);
   ds_apply_capability_hardening(cfg->hw_access, cfg->privileged_mask);
 
   /* 24. Redirect standard I/O to /dev/console */

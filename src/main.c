@@ -82,6 +82,8 @@ void print_usage(void) {
       "namespaces)\n"
       "      --landlock            Enable Landlock LSM filesystem sandbox "
       "(kernel 5.13+)\n"
+      "      --audio               Bridge audio to/from the Android "
+      "AudioBridgeService (Android only)\n"
       "      --privileged=TAGS     Relax security: nomask, nocaps, noseccomp, "
       "shared, unfiltered-dev, full\n\n"
 
@@ -359,6 +361,7 @@ int main(int argc, char **argv) {
       {"nat-ip", required_argument, 0, 262},
       {"gpu", no_argument, 0, 263},
       {"landlock", no_argument, 0, 265},
+      {"audio", no_argument, 0, 266},
       {"reset", no_argument, 0, 256},
       {"help", no_argument, 0, 'v'},
       {0, 0, 0, 0}};
@@ -915,6 +918,12 @@ int main(int argc, char **argv) {
       cfg.landlock = 1;
       break;
 
+    case 266:
+      /* --audio: bridge audio through the Android AudioBridgeService.
+       * No-op with a warning on Linux desktop. */
+      cfg.audio = 1;
+      break;
+
     case '?':
       break;
     default:
@@ -931,6 +940,15 @@ int main(int argc, char **argv) {
   }
 
   const char *cmd = argv[optind];
+
+  /* Internal subcommand spawned by ds_audio_spawn_gateway() inside the
+   * container.  Bypasses all the normal CLI setup. */
+  if (strcmp(cmd, "__pulse-gateway") == 0) {
+    int gw_argc = argc - optind;
+    char **gw_argv = argv + optind;
+    ret = pulse_gateway_main(gw_argc, gw_argv);
+    goto cleanup;
+  }
 
   /* Set up global logging context for centralized logging engine */
   if (cfg.container_name[0] != '\0') {

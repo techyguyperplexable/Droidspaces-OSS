@@ -267,6 +267,8 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
       cfg->block_nested_ns = parse_bool(val);
     } else if (strcmp(key, "landlock") == 0) {
       cfg->landlock = parse_bool(val);
+    } else if (strcmp(key, "audio") == 0) {
+      cfg->audio = parse_bool(val);
     } else if (strcmp(key, "privileged") == 0) {
       parse_privileged(val, cfg);
     } else if (strcmp(key, "bind_mounts") == 0) {
@@ -585,6 +587,7 @@ int ds_config_save(const char *config_path, struct ds_config *cfg) {
   fprintf(f_out, "force_cgroupv1=%d\n", cfg->force_cgroupv1);
   fprintf(f_out, "block_nested_ns=%d\n", cfg->block_nested_ns);
   fprintf(f_out, "landlock=%d\n", cfg->landlock);
+  fprintf(f_out, "audio=%d\n", cfg->audio);
 
   if (cfg->privileged_mask > 0) {
     fprintf(f_out, "privileged=");

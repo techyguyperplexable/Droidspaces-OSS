@@ -300,6 +300,7 @@ struct ds_config {
   int block_nested_ns;    /* --block-nested-namespaces: fix VFS deadlock by
                                blocking nested namespace creation */
   int landlock;           /* --landlock: opt-in LSM filesystem sandbox */
+  int audio;              /* --audio: bridge audio to Android AudioBridge */
   int privileged_mask;    /* --privileged bitmask */
   char prog_name[64];     /* argv[0] for logging */
 
@@ -726,6 +727,18 @@ void print_documentation(const char *argv0);
 
 int ds_landlock_supported(void);
 int ds_landlock_apply(const struct ds_config *cfg);
+
+/* ---------------------------------------------------------------------------
+ * audio.c / pulse_gateway.c
+ * ---------------------------------------------------------------------------*/
+
+int  ds_audio_get_host_socket(char *out, size_t size);
+int  ds_audio_setup(const struct ds_config *cfg);
+void ds_audio_apply_env(const struct ds_config *cfg);
+int  ds_audio_spawn_gateway(const struct ds_config *cfg);
+
+/* Entry point for the internal "__pulse-gateway" subcommand. */
+int  pulse_gateway_main(int argc, char **argv);
 
 /* ---------------------------------------------------------------------------
  * check.c
