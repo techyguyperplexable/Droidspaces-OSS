@@ -115,7 +115,7 @@ sudo droidspaces --name=web,db,app stop
 | `--foreground` | `-f` | Attach to the container console on start to see init logs. |
 | `--volatile` | `-V` | Ephemeral mode. Changes are stored in RAM and lost on exit. |
 | `--hw-access` | `-H` | Expose host hardware (GPU, USB, etc.). Auto-detects GPU group IDs and creates matching groups inside the container. Mounts X11 socket for GUI apps (Termux X11 on Android, `/tmp/.X11-unix` on Linux). See [Safety Warning](Features.md#hardware-access-mode). |
-| `--gpu` | | Exclusively enable GPU acceleration. Scans the host `/dev` for known GPU nodes, copies Android SELinux labels for mirrored nodes, and preserves Mali/MTK GPU driver metadata read-only without exposing other host hardware. (Ignored if `-H` is passed). |
+| `--gpu` | | Exclusively enable GPU acceleration. Scans the host `/dev` for known GPU nodes, copies Android SELinux labels for mirrored nodes, preserves Mali/MTK GPU driver metadata R/O, and enables native Mali Mesa defaults when a Mali DRM render node is present. (Ignored if `-H` is passed). |
 | `--termux-x11`| `-X` | Mount X11 socket for Termux-X11 display (Android only). |
 | `--enable-android-storage`| | Mount `/storage/emulated/0` (Android only). |
 | `--selinux-permissive` | | Set host SELinux to permissive for the container session. |
@@ -251,7 +251,7 @@ sudo droidspaces --name=mycontainer -u myuser run sh -c "id && env"
 ```
 
 ### GPU Acceleration
-Ensure only the GPU nodes and required read-only GPU metadata are exposed:
+Ensure only the GPU nodes and required R/O GPU metadata are exposed:
 ```bash
 sudo droidspaces --name=gpu-app --rootfs=/path/to/rootfs --gpu start
 ```

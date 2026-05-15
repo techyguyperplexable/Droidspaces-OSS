@@ -6,8 +6,9 @@ This guide provides step-by-step instructions for enabling GPU acceleration in y
 
 - [**Android Devices**](#android)
     - [01. Termux-X11 + llvmpipe (Software Rendering)](#termux-x11)
-    - [02. Termux-X11 + VirGL (Non-Qualcomm GPUs)](#virgl)
-    - [03. Turnip (Native Qualcomm/Adreno)](#turnip)
+    - [02. Native Qualcomm/Adreno](#turnip)
+    - [03. Native Mali](#mali-native)
+    - [04. Termux-X11 + VirGL](#virgl)
 - [**Linux Desktop (AMD/Intel)**](#linux)
 
 ---
@@ -57,50 +58,9 @@ When you enable the **Termux X11** toggle in the Droidspaces app, the following 
 
 ---
 
-<a id="virgl"></a>
-
-### 02. Termux-X11 + VirGL
-
-This method provides **GPU acceleration for non-Qualcomm devices (Mali/PowerVR)** via a `virglrenderer` bridge. It translates OpenGL calls from the container into commands that the host Android OS can execute.
-
-#### Setup Requirements
-
-- **Termux**: `pkg install x11-repo && pkg install termux-x11 virglrenderer-android`
-- **Container**: `sudo apt install mesa-utils` (for testing with `glxgears`)
-
-#### Implementation Steps
-
-1. **Container Configuration**: Enable **Termux-X11** in the Droidspaces container settings. Then, add the following to the **Environment Variables** section:
-    ```bash
-    DISPLAY=:0
-    GALLIUM_DRIVER=virpipe
-    ```
-
-2. **Start Container**: Launch your container.
-
-3. **Start VirGL Server**: Open Termux and run the server in the background:
-   ```bash
-   virgl_test_server_android &
-   ```
-
-4. **Start X Server**: In Termux, run:
-   ```bash
-   termux-x11 :0
-   ```
-
-5. **Verify Acceleration**: Run `glxinfo -B` and look for "VirGL" in the renderer string.
-
-> [!TIP]
->
-> **If the renderer fails to initialize,** try starting the VirGL server with the Vulkan backend:
->
-> `virgl_test_server_android --angle-vulkan &`
-
----
-
 <a id="turnip"></a>
 
-### 03. Turnip (Native Qualcomm/Adreno)
+### 02. Native Qualcomm/Adreno
 
 For Qualcomm Adreno GPUs, Droidspaces supports **native hardware acceleration** using the Turnip driver. This bypasses the need for `virgl` and provides near-native performance.
 
@@ -136,9 +96,70 @@ For Qualcomm Adreno GPUs, Droidspaces supports **native hardware acceleration** 
 
 > [!TIP]
 >
-> **If you encountered any problems related to dri3,** try edit `/data/adb/modules/droidspaces/etc/droidspaces.te` and uncomet line:
+> **If you encounter dri3 problems,** edit `/data/adb/modules/droidspaces/etc/droidspaces.te` and uncomment:
 >
 > `allow untrusted_app_27 droidspacesd fd use`
+
+---
+
+<a id="mali-native"></a>
+
+### 03. Native Mali
+
+Native Mali acceleration requires a Linux userspace driver that matches the host kernel interface. Droidspaces can make this automatic when the host exposes a Mali DRM render node backed by `panfrost`, `panthor`, or `lima`. In that case, GPU mode mirrors the render node, preserves Mali metadata, and sets `MESA_LOADER_DRIVER_OVERRIDE` to the matching Mesa driver.
+
+#### Requirements
+
+- A host kernel with a Mali DRM render node, usually `/dev/dri/renderD*`.
+- Container Mesa with `panfrost` or `lima` support.
+
+#### Implementation Steps
+
+1. **Enable GPU Access** in the Droidspaces container settings, or start with `--gpu`.
+
+2. **Verify the host driver** inside the container:
+
+   ```bash
+   ls -l /dev/dri/renderD*
+   glxinfo -B
+   ```
+
+If Droidspaces only sees Android kbase nodes such as `/dev/mali0`, `/dev/mali_kbase`, or `/dev/kbase`, it exposes those nodes and the required R/O metadata, but that is not enough by itself for native Linux acceleration. Stock Android Mali userspace is Android/Bionic userspace, not a drop-in Linux container driver.
+
+---
+
+<a id="virgl"></a>
+
+### 04. Termux-X11 + VirGL
+
+VirGL is a fallback bridge for devices without a usable native Linux GPU driver. It is not Droidspaces native Mali support and it requires a host-side `virglrenderer` server.
+
+#### Setup Requirements
+
+- **Termux**: `pkg install x11-repo && pkg install termux-x11 virglrenderer-android`
+- **Container**: `sudo apt install mesa-utils` (for testing with `glxgears`)
+
+#### Implementation Steps
+
+1. **Container Configuration**: Enable **Termux-X11** in the Droidspaces container settings. Then, add the following to the **Environment Variables** section:
+    ```bash
+    DISPLAY=:0
+    GALLIUM_DRIVER=virpipe
+    ```
+
+2. **Start Container**: Launch your container.
+
+3. **Start VirGL Server**: Open Termux and run the server in the background:
+   ```bash
+   virgl_test_server_android &
+   ```
+
+4. **Start X Server**: In Termux, run:
+   ```bash
+   termux-x11 :0
+   ```
+
+5. **Verify Acceleration**: Run `glxinfo -B` and look for "VirGL" in the renderer string.
 
 ---
 

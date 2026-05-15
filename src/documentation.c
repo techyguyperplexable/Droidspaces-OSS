@@ -325,7 +325,7 @@ static void print_page(int page, const char *bin) {
     printf("%sSecure GPU-only Mode (--gpu):%s\n", bold, reset);
     printf("  %s --name=mycontainer --rootfs=/path/to/rootfs --gpu start\n",
            bin);
-    printf("  (Maps GPU nodes plus read-only Mali/MTK driver metadata)\n\n");
+    printf("  (Maps GPU nodes plus R/O Mali/MTK driver metadata)\n\n");
 
     printf("%sAndroid-specific Features:%s\n", bold, reset);
     printf("  --enable-android-storage  Mounts /storage/emulated/0\n");

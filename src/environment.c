@@ -11,12 +11,52 @@
  * Internal Helpers
  * ---------------------------------------------------------------------------*/
 
+static int env_key_defined(struct ds_config *cfg, const char *key) {
+  if (!cfg || !key)
+    return 0;
+
+  for (int i = 0; i < cfg->env_var_count; i++) {
+    if (strcmp(cfg->env_vars[i].key, key) == 0)
+      return 1;
+  }
+
+  return 0;
+}
+
+static void write_env_export(FILE *f, const char *key, const char *val) {
+  if (!f || !key || !val)
+    return;
+
+  fprintf(f, "export %s='", key);
+  for (const char *p = val; *p; p++) {
+    if (*p == '\'')
+      fprintf(f, "'\\''");
+    else
+      fputc(*p, f);
+  }
+  fprintf(f, "'\n");
+}
+
 static void set_container_defaults(const char *term) {
   setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
          1);
   setenv("TERM", term ? term : "xterm-256color", 1);
   setenv("HOME", "/root", 1);
   setenv("container", "droidspaces", 1);
+}
+
+static const char *native_mali_driver(struct ds_config *cfg) {
+  if (!cfg || (!cfg->gpu_mode && !cfg->hw_access))
+    return NULL;
+  return ds_gpu_mali_mesa_driver();
+}
+
+static void set_graphics_defaults(struct ds_config *cfg) {
+  const char *mali_driver = native_mali_driver(cfg);
+  if (!mali_driver)
+    return;
+
+  setenv("MESA_LOADER_DRIVER_OVERRIDE", mali_driver, 0);
 }
 
 void load_etc_environment(void) {
@@ -73,6 +113,8 @@ void ds_env_boot_setup(struct ds_config *cfg) {
   /* Standard Linux LANG default */
   setenv("LANG", "en_US.UTF-8", 0);
 
+  set_graphics_defaults(cfg);
+
   /* User-defined variables - applied LAST so they override our defaults above
    */
   for (int i = 0; i < cfg->env_var_count; i++) {
@@ -90,21 +132,12 @@ void ds_env_save(const char *path, struct ds_config *cfg) {
     return;
   }
 
-  for (int i = 0; i < cfg->env_var_count; i++) {
-    const char *key = cfg->env_vars[i].key;
-    const char *val = cfg->env_vars[i].value;
+  const char *mali_driver = native_mali_driver(cfg);
+  if (mali_driver && !env_key_defined(cfg, "MESA_LOADER_DRIVER_OVERRIDE"))
+    write_env_export(f, "MESA_LOADER_DRIVER_OVERRIDE", mali_driver);
 
-    /* Escape single quotes for shell safety in export format */
-    fprintf(f, "export %s='", key);
-    for (const char *p = val; *p; p++) {
-      if (*p == '\'') {
-        fprintf(f, "'\\''");
-      } else {
-        fputc(*p, f);
-      }
-    }
-    fprintf(f, "'\n");
-  }
+  for (int i = 0; i < cfg->env_var_count; i++)
+    write_env_export(f, cfg->env_vars[i].key, cfg->env_vars[i].value);
 
   fclose(f);
   chmod(path, 0755);

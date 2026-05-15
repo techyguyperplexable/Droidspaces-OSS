@@ -72,6 +72,8 @@ static const char *gpu_static_devices[] = {
     "/dev/mali0",
     "/dev/mali_kbase",
     "/dev/kbase",
+    "/dev/ump",
+    "/dev/umplock",
     "/dev/genlock",
 
     /* AMD ROCm Compute */
@@ -106,6 +108,82 @@ static const char *gpu_static_devices[] = {
 
     NULL, /* sentinel */
 };
+
+static const char *mali_mesa_driver_from_kernel(const char *name) {
+  if (strcmp(name, "lima") == 0)
+    return "lima";
+  if (strcmp(name, "panfrost") == 0 || strcmp(name, "panthor") == 0)
+    return "panfrost";
+  return NULL;
+}
+
+static const char *mali_mesa_driver_from_link(const char *path) {
+  static char link_buf[PATH_MAX];
+  ssize_t len = readlink(path, link_buf, sizeof(link_buf) - 1);
+  if (len < 0)
+    return NULL;
+
+  link_buf[len] = '\0';
+  const char *name = strrchr(link_buf, '/');
+  name = name ? name + 1 : link_buf;
+  return mali_mesa_driver_from_kernel(name);
+}
+
+const char *ds_gpu_mali_mesa_driver(void) {
+  DIR *dir = opendir("/sys/class/drm");
+  if (!dir)
+    return NULL;
+
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strncmp(entry->d_name, "renderD", 7) != 0)
+      continue;
+
+    char driver_path[PATH_MAX];
+    snprintf(driver_path, sizeof(driver_path),
+             "/sys/class/drm/%s/device/driver", entry->d_name);
+
+    const char *driver = mali_mesa_driver_from_link(driver_path);
+    if (driver) {
+      closedir(dir);
+      return driver;
+    }
+  }
+
+  closedir(dir);
+  return NULL;
+}
+
+int ds_gpu_has_mali_kbase(void) {
+  const char *mali_paths[] = {"/dev/mali",       "/dev/mali0",
+                              "/dev/mali_kbase", "/dev/kbase",
+                              "/proc/mtk_mali",  "/proc/mali",
+                              "/proc/mali0",     NULL};
+
+  for (int i = 0; mali_paths[i]; i++) {
+    if (access(mali_paths[i], F_OK) == 0)
+      return 1;
+  }
+
+  DIR *dir = opendir("/dev");
+  if (!dir)
+    return 0;
+
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strncmp(entry->d_name, "mali", 4) == 0) {
+      closedir(dir);
+      return 1;
+    }
+  }
+
+  closedir(dir);
+  return 0;
+}
+
+int ds_gpu_is_mali(void) {
+  return ds_gpu_has_mali_kbase() || ds_gpu_mali_mesa_driver() != NULL;
+}
 
 static int copy_gpu_selinux_context(const char *host_path, const char *tgt) {
   if (!is_android())
@@ -1014,6 +1092,18 @@ int setup_hardware_access(struct ds_config *cfg) {
    *               actually open those nodes. */
   if (cfg->hw_access || cfg->gpu_mode)
     setup_gpu_groups();
+
+  if (is_android() && (cfg->hw_access || cfg->gpu_mode) && ds_gpu_is_mali()) {
+    const char *mesa_driver = ds_gpu_mali_mesa_driver();
+    if (mesa_driver) {
+      ds_log("[GPU] Native Mali DRM detected; Mesa driver hint: %s",
+             mesa_driver);
+    } else if (ds_gpu_has_mali_kbase()) {
+      ds_warn("[GPU] Mali kbase detected without a native DRM render node; "
+              "device access is exposed, but native Linux Mali acceleration "
+              "still needs a compatible userspace/kernel driver.");
+    }
+  }
 
   /* 2. Mount X11 socket for GUI applications (always attempt on Linux, check
    * flag on Android) */

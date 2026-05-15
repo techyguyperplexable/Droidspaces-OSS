@@ -498,6 +498,9 @@ void print_cgroup_status(struct ds_config *cfg);
  * ---------------------------------------------------------------------------*/
 
 int scan_host_gpu_gids(gid_t *gids, int max_gids);
+const char *ds_gpu_mali_mesa_driver(void);
+int ds_gpu_has_mali_kbase(void);
+int ds_gpu_is_mali(void);
 void mirror_gpu_nodes(const char *dev_path);
 int setup_gpu_groups(void);
 void stop_termux_if_running(void);
