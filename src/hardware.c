@@ -69,6 +69,9 @@ static const char *gpu_static_devices[] = {
 
     /* ARM Mali / Adreno aliases */
     "/dev/mali",
+    "/dev/mali0",
+    "/dev/mali_kbase",
+    "/dev/kbase",
     "/dev/genlock",
 
     /* AMD ROCm Compute */
@@ -98,10 +101,41 @@ static const char *gpu_static_devices[] = {
     "/dev/dxg",
 
     /* Async Sync */
+    "/dev/sync",
     "/dev/sw_sync",
 
     NULL, /* sentinel */
 };
+
+static int copy_gpu_selinux_context(const char *host_path, const char *tgt) {
+  if (!is_android())
+    return 0;
+
+  char context[256];
+  if (get_selinux_context(host_path, context, sizeof(context)) < 0)
+    return -1;
+
+  if (set_selinux_context(tgt, context) < 0) {
+    ds_warn("[GPU] Failed to copy SELinux context %s -> %s: %s", host_path, tgt,
+            strerror(errno));
+    return -1;
+  }
+
+  return 0;
+}
+
+static void bind_gpu_node_fallback(const char *host_path, const char *tgt) {
+  if (!is_android())
+    return;
+
+  if (mount(host_path, tgt, NULL, MS_BIND, NULL) == 0) {
+    ds_log("[GPU] Bound host-labeled node: %-30s", tgt);
+    return;
+  }
+
+  ds_warn("[GPU] Failed to bind host-labeled node %s -> %s: %s", host_path, tgt,
+          strerror(errno));
+}
 
 /*
  * is_dangerous_node()
@@ -542,6 +576,8 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
         ds_warn("[GPU] chown (pre-existing) %s → unified group: %s", tgt,
                 strerror(errno));
       chmod(tgt, 0660);
+      if (copy_gpu_selinux_context(host_path, tgt) < 0)
+        bind_gpu_node_fallback(host_path, tgt);
       return;
     }
 
@@ -572,6 +608,8 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
   if (chown(tgt, 0, DS_GPU_UNIFIED_GID) < 0)
     ds_warn("[GPU] chown %s → unified group: %s", tgt, strerror(errno));
   chmod(tgt, 0660);
+  if (copy_gpu_selinux_context(host_path, tgt) < 0)
+    bind_gpu_node_fallback(host_path, tgt);
 
   ds_log("[GPU] Mirrored missing node: %-30s (%d:%d)", tgt,
          (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev));

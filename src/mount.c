@@ -201,6 +201,28 @@ static void ds_mask_path(const char *path) {
   }
 }
 
+static int ds_ro_path(const char *path) {
+  struct stat st;
+  if (stat(path, &st) < 0)
+    return 0;
+
+  unsigned long bind_flags = MS_BIND;
+  if (S_ISDIR(st.st_mode))
+    bind_flags |= MS_REC;
+
+  if (mount(path, path, NULL, bind_flags, NULL) < 0 && errno != EBUSY) {
+    ds_warn("[SEC] Failed to pin read-only path %s: %s", path, strerror(errno));
+    return 0;
+  }
+
+  if (mount(path, path, NULL, bind_flags | MS_REMOUNT | MS_RDONLY, NULL) < 0) {
+    ds_warn("[SEC] Failed to remount %s read-only: %s", path, strerror(errno));
+    return 0;
+  }
+
+  return 1;
+}
+
 int bind_mount(const char *src, const char *tgt) {
   int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
@@ -259,7 +281,7 @@ int bind_mount(const char *src, const char *tgt) {
  * In Hardware Mode (hw_access=1), we preserve most paths to fulfill the
  * "everything possible" requirement for low-level hardware tools.
  */
-int ds_apply_jail_mask(int hw_access, int privileged_mask) {
+int ds_apply_jail_mask(int hw_access, int gpu_mode, int privileged_mask) {
   if (privileged_mask & DS_PRIV_NOMASK) {
     ds_log(
         "[SEC] --privileged=nomask: skipping jail masks for /proc and /sys.");
@@ -287,10 +309,6 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
                                   "/sys/block",
                                   "/sys/dev/block",
                                   "/sys/class/block",
-                                  "/proc/mtk_mali",
-                                  "/proc/gpufreqv2",
-                                  "/proc/mmdvfs",
-                                  "/proc/mmqos",
                                   "/proc/displowpower",
                                   "/proc/mtkfb_debug",
                                   "/proc/mtk_mdp_debug",
@@ -298,6 +316,13 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
                                   "/proc/perfmgr",
                                   "/proc/perfmgr_touch_boost",
                                   "/proc/mtk_scheduler",
+                                  NULL};
+
+  const char *gpu_proc_paths[] = {"/proc/mtk_mali", "/proc/mali",
+                                  "/proc/mali0",    "/proc/gpu",
+                                  "/proc/gpuinfo",  "/proc/gpufreq",
+                                  "/proc/gpufreqv2", "/proc/ged",
+                                  "/proc/mmdvfs",   "/proc/mmqos",
                                   NULL};
 
   /* Standard mode read-only remounts.
@@ -407,6 +432,13 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
   /* Apply standard mode masks */
   for (int i = 0; standard_masks[i]; i++) {
     ds_mask_path(standard_masks[i]);
+  }
+
+  for (int i = 0; gpu_proc_paths[i]; i++) {
+    if (gpu_mode)
+      ds_ro_path(gpu_proc_paths[i]);
+    else
+      ds_mask_path(gpu_proc_paths[i]);
   }
 
   /* Apply standard mode read-only remounts */

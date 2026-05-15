@@ -426,7 +426,7 @@ int internal_boot(struct ds_config *cfg) {
   setup_devpts(cfg->hw_access);
 
   /* Apply jail mask after pivot_root for correct path resolution */
-  ds_apply_jail_mask(cfg->hw_access, cfg->privileged_mask);
+  ds_apply_jail_mask(cfg->hw_access, cfg->gpu_mode, cfg->privileged_mask);
 
   /* 19. Configure rootfs networking (hostname, resolv.conf, etc) */
   fix_networking_rootfs(cfg);

@@ -187,13 +187,13 @@ After starting the container, set `DISPLAY=:0` inside the container to use the X
 |--------|-------------|
 | **DRI** (Intel, AMD, Mesa) | `/dev/dri/renderD128-130`, `/dev/dri/card0-2` |
 | **NVIDIA** (Proprietary) | `/dev/nvidia*`, `/dev/nvidia-uvm*`, `/dev/nvidia-caps/*` |
-| **ARM Mali** | `/dev/mali`, `/dev/mali0`, `/dev/mali1` |
+| **ARM Mali** | `/dev/mali`, `/dev/mali0`, `/dev/mali1`, `/dev/mali_kbase`, `/dev/kbase` |
 | **Qualcomm Adreno** | `/dev/kgsl-3d0`, `/dev/kgsl`, `/dev/genlock` |
 | **AMD Compute** | `/dev/kfd` |
 | **PowerVR** | `/dev/pvr_sync` |
 | **NVIDIA Tegra** | `/dev/nvhost-ctrl`, `/dev/nvhost-gpu`, `/dev/nvmap` |
 | **DMA Heaps** | `/dev/dma_heap/system`, `/dev/dma_heap/linux,cma`, `/dev/dma_heap/reserved`, `/dev/dma_heap/qcom,system` |
-| **Sync** | `/dev/sw_sync` |
+| **Sync** | `/dev/sync`, `/dev/sw_sync` |
 
 ---
 

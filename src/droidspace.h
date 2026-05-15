@@ -462,7 +462,7 @@ int domount(const char *src, const char *tgt, const char *fstype,
 int domount_silent(const char *src, const char *tgt, const char *fstype,
                    unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
-int ds_apply_jail_mask(int hw_access, int privileged_mask);
+int ds_apply_jail_mask(int hw_access, int gpu_mode, int privileged_mask);
 int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
               int privileged_mask);
 int create_devices(const char *rootfs, int hw_access, int privileged_mask);
